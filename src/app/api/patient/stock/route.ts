@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, gt } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { stockItems } from "@/db/schema";
 import { verifyBearer } from "@/lib/auth";
 
 export const runtime = "nodejs";
+
+function num(v: string | null): number {
+  return Number(v || 0);
+}
 
 export async function GET(request: Request) {
   try {
@@ -14,17 +18,32 @@ export async function GET(request: Request) {
     }
 
     const db = getDb();
-    const items = await db
+    const rows = await db
       .select({
         id: stockItems.id,
         drugName: stockItems.drugName,
         description: stockItems.description,
         quantityOnHand: stockItems.quantityOnHand,
         unit: stockItems.unit,
+        isAvailable: stockItems.isAvailable,
+        priceNaira: stockItems.priceNaira,
+        priceUsdc: stockItems.priceUsdc,
       })
       .from(stockItems)
-      .where(and(eq(stockItems.isAvailable, true), gt(stockItems.quantityOnHand, 0)))
+      .where(eq(stockItems.isAvailable, true))
       .orderBy(desc(stockItems.id));
+
+    const items = rows.map((r) => ({
+      id: r.id,
+      drugName: r.drugName,
+      description: r.description,
+      quantityOnHand: r.quantityOnHand,
+      unit: r.unit,
+      isAvailable: r.isAvailable,
+      priceNaira: num(r.priceNaira),
+      priceUsdc: num(r.priceUsdc),
+      inStock: r.quantityOnHand > 0,
+    }));
 
     return NextResponse.json({ items });
   } catch (e) {

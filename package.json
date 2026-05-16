@@ -12,13 +12,17 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@circle-fin/adapter-viem-v2": "^1.10.0",
+    "@circle-fin/app-kit": "^1.5.1",
+    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "@neondatabase/serverless": "^0.10.4",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.38.3",
     "jsonwebtoken": "^9.0.2",
     "next": "^15.1.3",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

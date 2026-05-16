@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { PharmacistRxPanel } from "@/components/PharmacistRxPanel";
+import { PatientWalletPanel } from "@/components/PatientWalletPanel";
+import { StockMarketplace, type MarketplaceOrder } from "@/components/StockMarketplace";
 
 const TOKEN_KEY = "jerlyd-session-token";
 
@@ -10,6 +12,7 @@ type PortalUser = {
   email: string;
   role: "patient" | "pharmacist";
   displayName: string;
+  walletAddress?: string | null;
   createdAt?: string;
 };
 
@@ -36,6 +39,8 @@ type StockItem = {
   quantityOnHand: number;
   unit: string;
   isAvailable?: boolean;
+  priceNaira?: number;
+  priceUsdc?: number;
 };
 
 type PatientOrder = {
@@ -57,7 +62,7 @@ type PharmacistOrder = PatientOrder & {
   patientEmail: string;
 };
 
-type PatientTab = "meds" | "shop";
+type PatientTab = "meds" | "shop" | "wallet";
 type AdminTab = "patients" | "stock" | "orders";
 
 type PatientRow = {
@@ -488,119 +493,49 @@ export function PharmacyPortal() {
             aria-selected={patientTab === "shop"}
             onClick={() => setPatientTab("shop")}
           >
-            Order from stock
+            Marketplace
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`portal-tab${patientTab === "wallet" ? " is-active" : ""}`}
+            aria-selected={patientTab === "wallet"}
+            onClick={() => {
+              setPatientTab("wallet");
+              if (patientOrders === null) void loadPatientShop();
+            }}
+          >
+            My wallet
           </button>
         </div>
         {patientTab === "shop" ? (
-          patientStock === null || patientOrders === null ? (
-            <p className="muted">Loading stock and your orders…</p>
-          ) : (
-            <>
-              <h3 style={{ margin: "0 0 0.5rem", fontFamily: "var(--font-heading), Georgia, serif" }}>
-                Available in stock
-              </h3>
-              <p className="panel-sub">Request medications currently available at the pharmacy.</p>
-              {patientStock.length === 0 ? (
-                <p className="empty-state muted">No medications in stock right now. Check back later.</p>
-              ) : (
-                <div className="stock-grid" style={{ marginBottom: "1.5rem" }}>
-                  {patientStock.map((item) => (
-                    <article key={item.id} className="stock-card">
-                      <h3>{item.drugName}</h3>
-                      {item.description ? <p className="muted" style={{ margin: "0 0 0.5rem" }}>{item.description}</p> : null}
-                      <p className="muted" style={{ margin: "0 0 0.75rem", fontSize: "0.88rem" }}>
-                        <strong>{item.quantityOnHand}</strong> {item.unit} available
-                      </p>
-                      <form
-                        className="form-grid"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          const fd = new FormData(e.currentTarget);
-                          try {
-                            await api("/patient/orders", {
-                              method: "POST",
-                              body: JSON.stringify({
-                                stockItemId: item.id,
-                                quantity: Number(fd.get("quantity") || 1),
-                                patientNote: String(fd.get("patientNote") || ""),
-                              }),
-                            });
-                            setPatientStock(null);
-                            setPatientOrders(null);
-                            setFlash({ msg: "Order placed. The pharmacy will review it.", kind: "success" });
-                          } catch (err) {
-                            setFlash({ msg: (err as Error).message, kind: "error" });
-                          }
-                        }}
-                      >
-                        <div>
-                          <label htmlFor={`qty-${item.id}`}>Quantity</label>
-                          <input
-                            id={`qty-${item.id}`}
-                            name="quantity"
-                            type="number"
-                            min={1}
-                            max={Math.min(999, item.quantityOnHand)}
-                            defaultValue={1}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`note-${item.id}`}>Note (optional)</label>
-                          <input id={`note-${item.id}`} name="patientNote" placeholder="Pickup preference, questions…" />
-                        </div>
-                        <div className="form-actions">
-                          <button type="submit" className="btn btn-primary">
-                            Place order
-                          </button>
-                        </div>
-                      </form>
-                    </article>
-                  ))}
-                </div>
-              )}
-              <h3 style={{ margin: "0 0 0.5rem", fontFamily: "var(--font-heading), Georgia, serif" }}>Your orders</h3>
-              {patientOrders.length === 0 ? (
-                <p className="muted">You have not placed any orders yet.</p>
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Medication</th>
-                        <th>Qty</th>
-                        <th>Status</th>
-                        <th>Pharmacy note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {patientOrders.map((o) => (
-                        <tr key={o.id}>
-                          <td>
-                            <strong>{o.drugName}</strong>
-                            {o.patientNote ? (
-                              <div className="muted" style={{ fontSize: "0.82rem" }}>
-                                Your note: {o.patientNote}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td>
-                            {o.quantity} {o.unit}
-                          </td>
-                          <td>
-                            <span className={`status-pill status-pill--${o.status}`}>{o.status}</span>
-                          </td>
-                          <td className="muted" style={{ fontSize: "0.88rem" }}>
-                            {o.pharmacistNote || "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )
+          <StockMarketplace
+            userId={currentUser.id}
+            userEmail={currentUser.email}
+            api={api}
+            onFlash={(msg, kind) => setFlash({ msg, kind })}
+            onOrdersChanged={() => {
+              setPatientStock(null);
+              setPatientOrders(null);
+            }}
+          />
+        ) : null}
+        {patientTab === "wallet" ? (
+          <PatientWalletPanel
+            userId={currentUser.id}
+            email={currentUser.email}
+            walletAddress={currentUser.walletAddress}
+            orders={(patientOrders as MarketplaceOrder[] | null) || []}
+            api={api}
+            onWalletLinked={async () => {
+              try {
+                const data = await api<{ user: PortalUser }>("/me");
+                setCurrentUser(data.user);
+              } catch {
+                /* ignore */
+              }
+            }}
+          />
         ) : null}
         {patientTab === "meds" && patientPrescriptions.length === 0 ? (
           <div className="empty-state">
@@ -954,6 +889,8 @@ export function PharmacyPortal() {
                             quantityOnHand: Number(fd.get("quantityOnHand") || 0),
                             unit: String(fd.get("unit") || "units"),
                             isAvailable: fd.get("isAvailable") === "on",
+                            priceNaira: Number(fd.get("priceNaira") || 0),
+                            priceUsdc: Number(fd.get("priceUsdc") || 0),
                           }),
                         });
                         setPharmacistStock(null);
@@ -982,6 +919,19 @@ export function PharmacyPortal() {
                         <input id="stkUnit" name="unit" defaultValue="units" placeholder="e.g. tablets, bottles" />
                       </div>
                     </div>
+                    <div className="form-grid two" style={{ gridColumn: "1 / -1" }}>
+                      <div>
+                        <label htmlFor="stkNaira">Price (₦ Naira)</label>
+                        <input id="stkNaira" name="priceNaira" type="number" min={0} step="0.01" defaultValue={0} />
+                      </div>
+                      <div>
+                        <label htmlFor="stkUsdc">Price (USDC)</label>
+                        <input id="stkUsdc" name="priceUsdc" type="number" min={0} step="0.000001" defaultValue={0} />
+                      </div>
+                    </div>
+                    <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>
+                      If USDC is 0, the marketplace estimates it from the live ₦/USDC rate.
+                    </p>
                     <div>
                       <label>
                         <input type="checkbox" name="isAvailable" defaultChecked /> Available for patient orders
@@ -1017,8 +967,13 @@ export function PharmacyPortal() {
                                   {item.description}
                                 </div>
                               ) : null}
+                              <div className="muted" style={{ fontSize: "0.82rem", marginTop: "0.35rem" }}>
+                                ₦{Number(item.priceNaira || 0).toFixed(2)} · {Number(item.priceUsdc || 0).toFixed(4)} USDC
+                              </div>
                             </td>
-                            <td colSpan={3}>
+                            <td>{item.quantityOnHand}</td>
+                            <td>{item.isAvailable !== false ? "Yes" : "No"}</td>
+                            <td>
                               <form
                                 className="form-grid two"
                                 style={{ margin: 0 }}
@@ -1034,6 +989,8 @@ export function PharmacyPortal() {
                                         quantityOnHand: Number(fd.get("quantityOnHand") || 0),
                                         unit: String(fd.get("unit") || "units"),
                                         isAvailable: fd.get("isAvailable") === "on",
+                                        priceNaira: Number(fd.get("priceNaira") || 0),
+                                        priceUsdc: Number(fd.get("priceUsdc") || 0),
                                       }),
                                     });
                                     setPharmacistStock(null);
@@ -1056,6 +1013,12 @@ export function PharmacyPortal() {
                                 </div>
                                 <div>
                                   <input name="unit" defaultValue={item.unit} />
+                                </div>
+                                <div>
+                                  <input name="priceNaira" type="number" min={0} step="0.01" defaultValue={item.priceNaira ?? 0} placeholder="₦ price" />
+                                </div>
+                                <div>
+                                  <input name="priceUsdc" type="number" min={0} step="0.000001" defaultValue={item.priceUsdc ?? 0} placeholder="USDC" />
                                 </div>
                                 <div>
                                   <label>

@@ -6,6 +6,12 @@ import { verifyBearer } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+const PAYMENT_METHODS = ["pending", "card_naira", "usdc"] as const;
+
+function num(v: string | null): number {
+  return Number(v || 0);
+}
+
 export async function GET(request: Request) {
   try {
     const auth = verifyBearer(request.headers.get("authorization"));
@@ -22,6 +28,10 @@ export async function GET(request: Request) {
         status: medicationOrders.status,
         patientNote: medicationOrders.patientNote,
         pharmacistNote: medicationOrders.pharmacistNote,
+        paymentMethod: medicationOrders.paymentMethod,
+        txHash: medicationOrders.txHash,
+        totalNaira: medicationOrders.totalNaira,
+        totalUsdc: medicationOrders.totalUsdc,
         createdAt: medicationOrders.createdAt,
         updatedAt: medicationOrders.updatedAt,
         drugName: stockItems.drugName,
@@ -32,7 +42,13 @@ export async function GET(request: Request) {
       .where(eq(medicationOrders.patientUserId, auth.sub))
       .orderBy(desc(medicationOrders.id));
 
-    return NextResponse.json({ orders });
+    return NextResponse.json({
+      orders: orders.map((o) => ({
+        ...o,
+        totalNaira: num(o.totalNaira),
+        totalUsdc: num(o.totalUsdc),
+      })),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
     const status = msg.includes("authorization") || msg.includes("jwt") ? 401 : 500;
@@ -51,13 +67,23 @@ export async function POST(request: Request) {
       stockItemId?: number;
       quantity?: number;
       patientNote?: string;
+      paymentMethod?: string;
+      txHash?: string;
     };
     const stockItemId = Number(body.stockItemId);
     const quantity = Math.floor(Number(body.quantity));
     const patientNote = String(body.patientNote || "").trim().slice(0, 2000);
+    const paymentMethod = String(body.paymentMethod || "card_naira").trim();
+    const txHash = String(body.txHash || "").trim();
 
     if (!stockItemId || quantity < 1 || quantity > 999) {
       return NextResponse.json({ error: "Choose a medication and a valid quantity (1–999)." }, { status: 400 });
+    }
+    if (!PAYMENT_METHODS.includes(paymentMethod as (typeof PAYMENT_METHODS)[number])) {
+      return NextResponse.json({ error: "Invalid payment method." }, { status: 400 });
+    }
+    if (paymentMethod === "usdc" && (!txHash.startsWith("0x") || txHash.length < 10)) {
+      return NextResponse.json({ error: "USDC payment requires a valid transaction hash." }, { status: 400 });
     }
 
     const db = getDb();
@@ -79,16 +105,27 @@ export async function POST(request: Request) {
         };
       }
 
+      const unitNaira = num(item.priceNaira);
+      const unitUsdc = num(item.priceUsdc);
+      const totalNaira = Math.round(unitNaira * quantity * 100) / 100;
+      const totalUsdc = Math.round(unitUsdc * quantity * 1_000_000) / 1_000_000;
+
       const t = new Date().toISOString();
+      const status = paymentMethod === "card_naira" ? "pending" : "confirmed";
+
       const inserted = await tx
         .insert(medicationOrders)
         .values({
           patientUserId: auth.sub,
           stockItemId,
           quantity,
-          status: "pending",
+          status,
           patientNote,
           pharmacistNote: "",
+          paymentMethod,
+          txHash: txHash || null,
+          totalNaira: String(totalNaira),
+          totalUsdc: String(totalUsdc),
           createdAt: t,
           updatedAt: t,
         })

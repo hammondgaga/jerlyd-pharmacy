@@ -40,6 +40,8 @@ export async function POST(request: Request) {
       quantityOnHand?: number;
       unit?: string;
       isAvailable?: boolean;
+      priceNaira?: number;
+      priceUsdc?: number;
     };
 
     const drugName = String(body.drugName || "").trim();
@@ -47,6 +49,8 @@ export async function POST(request: Request) {
     const quantityOnHand = Math.max(0, Math.floor(Number(body.quantityOnHand) || 0));
     const unit = String(body.unit || "units").trim().slice(0, 40) || "units";
     const isAvailable = body.isAvailable !== false;
+    const priceNaira = Math.max(0, Number(body.priceNaira) || 0);
+    const priceUsdc = Math.max(0, Number(body.priceUsdc) || 0);
 
     if (!drugName) {
       return NextResponse.json({ error: "Medication name is required." }, { status: 400 });
@@ -62,6 +66,8 @@ export async function POST(request: Request) {
         quantityOnHand,
         unit,
         isAvailable,
+        priceNaira: String(priceNaira.toFixed(2)),
+        priceUsdc: String(priceUsdc.toFixed(6)),
         updatedByUserId: auth.sub,
         createdAt: t,
         updatedAt: t,

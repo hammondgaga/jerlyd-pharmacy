@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, numeric, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const users = pgTable(
   "users",
@@ -8,6 +8,7 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     role: text("role").notNull(),
     displayName: text("display_name").notNull(),
+    walletAddress: text("wallet_address"),
     createdAt: text("created_at").notNull(),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)]
@@ -45,6 +46,8 @@ export const stockItems = pgTable("stock_items", {
   quantityOnHand: integer("quantity_on_hand").notNull().default(0),
   unit: text("unit").notNull().default("units"),
   isAvailable: boolean("is_available").notNull().default(true),
+  priceNaira: numeric("price_naira", { precision: 10, scale: 2 }).notNull().default("0"),
+  priceUsdc: numeric("price_usdc", { precision: 10, scale: 6 }).notNull().default("0"),
   updatedByUserId: integer("updated_by_user_id").references(() => users.id),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -64,6 +67,10 @@ export const medicationOrders = pgTable(
     status: text("status").notNull().default("pending"),
     patientNote: text("patient_note").notNull().default(""),
     pharmacistNote: text("pharmacist_note").notNull().default(""),
+    paymentMethod: text("payment_method").notNull().default("pending"),
+    txHash: text("tx_hash"),
+    totalNaira: numeric("total_naira", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalUsdc: numeric("total_usdc", { precision: 12, scale: 6 }).notNull().default("0"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

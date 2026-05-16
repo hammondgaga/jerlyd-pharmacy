@@ -524,3 +524,88 @@ th {
   border: 1px solid #b8e3cc;
   font-size: 0.9rem;
 }
+
+.marketplace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.marketplace-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.marketplace-rate {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.stock-card--out {
+  opacity: 0.72;
+}
+
+.stock-prices {
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+}
+
+.price-sep {
+  color: var(--muted);
+}
+
+.checkout-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(15, 31, 26, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.checkout-panel {
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.checkout-total {
+  font-size: 1.05rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.payment-methods {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.payment-option {
+  display: block;
+  margin: 0.5rem 0;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.wallet-panel .wallet-stats {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.wallet-panel .wallet-stats dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.wallet-panel .wallet-stats dd {
+  margin: 0;
+}

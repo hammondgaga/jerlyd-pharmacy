@@ -55,6 +55,7 @@ export async function getUserRow(id: number) {
       email: users.email,
       role: users.role,
       displayName: users.displayName,
+      walletAddress: users.walletAddress,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -68,6 +69,7 @@ export async function getUserRow(id: number) {
     email: row.email,
     role,
     displayName: row.displayName,
+    walletAddress: row.walletAddress,
     createdAt: row.createdAt,
   };
 }

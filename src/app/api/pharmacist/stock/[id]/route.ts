@@ -22,6 +22,8 @@ export async function PATCH(request: Request, ctx: Params) {
       quantityOnHand?: number;
       unit?: string;
       isAvailable?: boolean;
+      priceNaira?: number;
+      priceUsdc?: number;
     };
 
     const db = getDb();
@@ -40,6 +42,10 @@ export async function PATCH(request: Request, ctx: Params) {
         : row.quantityOnHand;
     const unit = body.unit !== undefined ? String(body.unit).trim().slice(0, 40) || "units" : row.unit;
     const isAvailable = body.isAvailable !== undefined ? Boolean(body.isAvailable) : row.isAvailable;
+    const priceNaira =
+      body.priceNaira !== undefined ? Math.max(0, Number(body.priceNaira)) : Number(row.priceNaira || 0);
+    const priceUsdc =
+      body.priceUsdc !== undefined ? Math.max(0, Number(body.priceUsdc)) : Number(row.priceUsdc || 0);
 
     if (!drugName) {
       return NextResponse.json({ error: "Medication name is required." }, { status: 400 });
@@ -54,6 +60,8 @@ export async function PATCH(request: Request, ctx: Params) {
         quantityOnHand,
         unit,
         isAvailable,
+        priceNaira: String(priceNaira.toFixed(2)),
+        priceUsdc: String(priceUsdc.toFixed(6)),
         updatedByUserId: auth.sub,
         updatedAt,
       })
