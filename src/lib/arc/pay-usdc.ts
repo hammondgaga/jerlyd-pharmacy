@@ -4,71 +4,26 @@ import { fetchArcUsdcBalance } from "@/lib/arc/usdc-balance";
 
 export { fetchArcUsdcBalance };
 
-const ARC_CHAIN = "Arc_Testnet" as const;
-
 export type UsdcPayResult = {
   txHash: string;
-  raw: unknown;
+  explorerUrl?: string;
 };
 
-/** Pay USDC on Arc testnet via App Kit Unified Balance. */
+type PayApi = <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
+
+/** Pay USDC on Arc testnet via server route (avoids browser CORS / Gateway errors). */
 export async function payUsdcWithArc(
+  api: PayApi,
   privateKey: `0x${string}`,
   amountUsdc: string,
   recipientAddress: string
 ): Promise<UsdcPayResult> {
-  const treasury = process.env.NEXT_PUBLIC_PHARMACY_USDC_WALLET?.trim();
-  if (!treasury || !/^0x[a-fA-F0-9]{40}$/.test(treasury)) {
-    throw new Error("Pharmacy USDC wallet is not configured (NEXT_PUBLIC_PHARMACY_USDC_WALLET).");
-  }
-
-  const to = recipientAddress || treasury;
-
-  const [{ AppKit }, { createViemAdapterFromPrivateKey }] = await Promise.all([
-    import("@circle-fin/app-kit"),
-    import("@circle-fin/adapter-viem-v2"),
-  ]);
-
-  const adapter = createViemAdapterFromPrivateKey({ privateKey });
-  const kit = new AppKit();
-
-  const result = await kit.unifiedBalance.spend({
-    from: {
-      adapter,
-      allocations: { amount: amountUsdc, chain: ARC_CHAIN },
-    },
-    to: {
-      adapter,
-      chain: ARC_CHAIN,
-      recipientAddress: to,
-    },
-    amount: amountUsdc,
-    token: "USDC",
+  return api<UsdcPayResult>("/patient/pay-usdc", {
+    method: "POST",
+    body: JSON.stringify({
+      privateKey,
+      amountUsdc,
+      recipientAddress: recipientAddress || undefined,
+    }),
   });
-
-  const txHash = result.txHash || extractTxHash(result);
-  if (!txHash) {
-    throw new Error("Payment submitted but no transaction hash was returned. Check your wallet activity.");
-  }
-
-  return { txHash, raw: result };
-}
-
-function extractTxHash(result: unknown): string | null {
-  if (!result || typeof result !== "object") return null;
-  const r = result as Record<string, unknown>;
-  if (typeof r.txHash === "string") return r.txHash;
-  if (typeof r.transactionHash === "string") return r.transactionHash;
-  if (typeof r.hash === "string") return r.hash;
-  const steps = r.steps;
-  if (Array.isArray(steps)) {
-    for (const step of steps) {
-      if (step && typeof step === "object") {
-        const s = step as Record<string, unknown>;
-        if (typeof s.txHash === "string") return s.txHash;
-        if (typeof s.transactionHash === "string") return s.transactionHash;
-      }
-    }
-  }
-  return null;
 }

@@ -147,7 +147,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
           setPaying(false);
           return;
         }
-        const pay = await payUsdcWithArc(privateKey, totals.usdc.toFixed(6), "");
+        const pay = await payUsdcWithArc(api, privateKey, totals.usdc.toFixed(6), "");
         txHash = pay.txHash;
       }
 
