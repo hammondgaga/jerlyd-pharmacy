@@ -309,27 +309,67 @@ export function PharmacyPortal() {
   const welcome = (
     <>
       <section className="hero" aria-labelledby="welcome-title">
-        <p className="pill">Jerlyd Pharmacy — patient care portal</p>
-        <h1 id="welcome-title">Welcome to Jerlyd Pharmacy</h1>
-        <p className="hero-lead">
-          Whether you are picking up a new prescription or continuing care, this site helps you stay organized after
-          your visit. Create a free account to see medications your pharmacist records for you at Jerlyd Pharmacy,
-          review indication, dosage, and duration, and leave feedback or side effects you want the team to know about.
-        </p>
-        <div className="hero-actions">
-          <button type="button" className="btn btn-primary" onClick={() => { setView("patient"); setPatientSub("login"); }}>
-            Patient sign-in
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => { setView("patient"); setPatientSub("register"); }}
-          >
-            Create patient account
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => { setView("admin"); setAdminSub("login"); }}>
-            Pharmacist
-          </button>
+        <div className="hero-inner">
+          <div className="hero-content">
+            <h1 id="welcome-title">Welcome to Jerlyd Pharmacy</h1>
+            <p className="hero-subtitle">Your medications, tracked and accessible — anytime.</p>
+            <div className="hero-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setView("patient");
+                  setPatientSub("login");
+                }}
+              >
+                Patient sign-in
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setView("patient");
+                  setPatientSub("register");
+                }}
+              >
+                Create account
+              </button>
+            </div>
+            <p className="hero-staff">
+              Pharmacy staff?{" "}
+              <button
+                type="button"
+                className="hero-staff-link"
+                onClick={() => {
+                  setView("admin");
+                  setAdminSub("login");
+                }}
+              >
+                Pharmacist sign-in
+              </button>
+            </p>
+          </div>
+          <div className="hero-art" aria-hidden>
+            <svg className="hero-illustration" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="100" cy="100" r="88" stroke="#0F6E56" strokeWidth="2" strokeOpacity="0.15" />
+              <circle cx="100" cy="100" r="68" fill="#0F6E56" fillOpacity="0.06" />
+              <rect x="38" y="78" width="52" height="44" rx="22" stroke="#0F6E56" strokeWidth="2.5" />
+              <rect x="58" y="78" width="32" height="44" rx="16" fill="#0F6E56" fillOpacity="0.18" />
+              <line x1="64" y1="100" x2="84" y2="100" stroke="#0F6E56" strokeWidth="2" strokeOpacity="0.35" />
+              <circle cx="138" cy="92" r="28" stroke="#085041" strokeWidth="2.5" />
+              <path d="M138 78v28M124 92h28" stroke="#085041" strokeWidth="2.5" strokeLinecap="round" />
+              <path
+                d="M52 148c12-8 28-8 40 0M108 148c10-6 24-6 34 0"
+                stroke="#0F6E56"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeOpacity="0.4"
+              />
+              <circle cx="72" cy="52" r="6" fill="#0F6E56" fillOpacity="0.25" />
+              <circle cx="148" cy="138" r="5" fill="#0F6E56" fillOpacity="0.2" />
+              <circle cx="48" cy="118" r="4" fill="#085041" fillOpacity="0.15" />
+            </svg>
+          </div>
         </div>
       </section>
       <section className="panel" aria-labelledby="how-title">
@@ -1300,8 +1340,13 @@ export function PharmacyPortal() {
       <div className="bg-pattern" aria-hidden />
       <header className="site-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden>
-            ✚
+          <span className="brand-icon" aria-hidden>
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1.5" y="10" width="11" height="8" rx="4" stroke="currentColor" strokeWidth="1.75" />
+              <rect x="6.5" y="10" width="6" height="8" rx="3" fill="currentColor" fillOpacity="0.2" />
+              <circle cx="20" cy="14" r="6.5" stroke="currentColor" strokeWidth="1.75" />
+              <path d="M20 11.25v5.5M17.25 14h5.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
           </span>
           <div>
             <p className="brand-name">Jerlyd Pharmacy</p>
@@ -1342,15 +1387,10 @@ export function PharmacyPortal() {
       <main className="main">{main}</main>
 
       <footer className="site-footer">
-        <p>
-          Jerlyd Pharmacy — For questions about your medications, speak with your pharmacist or prescriber. This portal
-          does not replace professional medical advice.
-        </p>
-        <p className="footer-note">
-          Hosting needs DATABASE_URL, JWT_SECRET (16+ characters), and PHARMACIST_INVITE_CODE. Create tables once:
-          run <code>npm run db:migrate</code> with the same DATABASE_URL in <code>.env.local</code>, or paste{" "}
-          <code>scripts/neon-init-once.sql</code> into the Neon SQL Editor.
-        </p>
+        <div className="site-footer-inner">
+          <p className="site-footer-copy">© 2026 Jerlyd Pharmacy. All rights reserved.</p>
+          <p className="site-footer-disclaimer">This portal does not replace professional medical advice.</p>
+        </div>
       </footer>
     </>
   );
