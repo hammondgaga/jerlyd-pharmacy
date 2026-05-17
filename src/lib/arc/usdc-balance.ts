@@ -17,7 +17,12 @@ function arcPublicClient() {
  * Uses the official USDC ERC-20 `balanceOf` (6 decimals), per Arc docs.
  */
 export async function fetchArcUsdcBalance(address: `0x${string}`): Promise<string> {
+  const rpcUrl = arcTestnet.rpcUrls.default.http[0];
   const client = arcPublicClient();
+
+  console.log("[Arc USDC balance] wallet address:", address);
+  console.log("[Arc USDC balance] USDC contract:", arcTestnetUsdcAddress);
+  console.log("[Arc USDC balance] RPC:", rpcUrl);
 
   const erc20Raw = await client.readContract({
     address: arcTestnetUsdcAddress,
@@ -26,7 +31,11 @@ export async function fetchArcUsdcBalance(address: `0x${string}`): Promise<strin
     args: [address],
   });
 
-  return formatUnits(erc20Raw, USDC_DECIMALS);
+  const formatted = formatUnits(erc20Raw, USDC_DECIMALS);
+  console.log("[Arc USDC balance] raw balanceOf response:", erc20Raw.toString());
+  console.log("[Arc USDC balance] formatted (6 decimals):", formatted);
+
+  return formatted;
 }
 
 /** @deprecated Use fetchArcUsdcBalance; kept for callers passing pre-fetched raw units. */
