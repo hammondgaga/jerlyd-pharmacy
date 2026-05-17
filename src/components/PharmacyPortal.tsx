@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { PharmacistRxPanel } from "@/components/PharmacistRxPanel";
 import { PatientWalletPanel } from "@/components/PatientWalletPanel";
 import { StockMarketplace, type MarketplaceOrder } from "@/components/StockMarketplace";
+import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
 
 const TOKEN_KEY = "jerlyd-session-token";
 
@@ -241,6 +242,22 @@ export function PharmacyPortal() {
       void loadPatientShop();
     }
   }, [currentUser, view, patientTab, patientStock, loadPatientShop]);
+
+  useEffect(() => {
+    if (currentUser?.role !== "patient" || view !== "patient") return;
+
+    void (async () => {
+      try {
+        const existing = await fetchPatientWalletAddress(api);
+        if (existing) return;
+        await ensurePatientWallet(api, currentUser.id, currentUser.email);
+        const data = await api<{ user: PortalUser }>("/me");
+        setCurrentUser(data.user);
+      } catch {
+        /* wallet can be created later from My wallet or checkout */
+      }
+    })();
+  }, [currentUser?.id, currentUser?.role, currentUser?.email, view]);
 
   useEffect(() => {
     if (currentUser?.role === "pharmacist" && view === "admin" && adminTab === "stock" && pharmacistStock === null) {

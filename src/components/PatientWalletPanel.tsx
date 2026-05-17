@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchArcUsdcBalance } from "@/lib/arc/pay-usdc";
-import { getOrCreatePatientWallet, truncateAddress } from "@/lib/arc/patient-wallet";
+import { ensurePatientWallet, fetchPatientWalletAddress, truncateAddress } from "@/lib/arc/patient-wallet";
+import { formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 import type { MarketplaceOrder } from "@/components/StockMarketplace";
 
 type Props = {
@@ -18,22 +19,29 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
   const [address, setAddress] = useState<string | null>(walletAddress || null);
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const syncWallet = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const { privateKey, address: addr, created } = getOrCreatePatientWallet(userId, email);
-      void privateKey;
+      const dbAddress = await fetchPatientWalletAddress(api);
+
+      if (dbAddress) {
+        setAddress(dbAddress);
+        const bal = await fetchArcUsdcBalance(dbAddress);
+        setBalance(bal);
+        return;
+      }
+
+      const { address: addr, created } = await ensurePatientWallet(api, userId, email);
       setAddress(addr);
-      await api("/patient/wallet", {
-        method: "PATCH",
-        body: JSON.stringify({ walletAddress: addr }),
-      });
-      if (created) onWalletLinked();
       const bal = await fetchArcUsdcBalance(addr);
       setBalance(bal);
-    } catch {
+      if (created) onWalletLinked();
+    } catch (err) {
+      setError((err as Error).message);
       setBalance(null);
     } finally {
       setLoading(false);
@@ -63,6 +71,11 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
         </a>{" "}
         to pay with USDC.
       </p>
+      {error ? (
+        <p className="flash flash--error" role="alert">
+          {error}
+        </p>
+      ) : null}
       {loading ? (
         <p className="muted">Loading wallet…</p>
       ) : (
@@ -82,7 +95,7 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
             <div>
               <dt>USDC balance (Arc testnet)</dt>
               <dd>
-                <strong>{balance !== null ? `${Number(balance).toFixed(2)} USDC` : "—"}</strong>
+                <strong>{balance !== null ? `${formatUsdcDisplay(balance)} USDC` : "—"}</strong>
               </dd>
             </div>
           </dl>

@@ -1,7 +1,8 @@
 "use client";
 
-import { createPublicClient, formatUnits, http } from "viem";
+import { createPublicClient, http } from "viem";
 import { arcTestnet } from "@/lib/arc/chains";
+import { rawUsdcToAmount } from "@/lib/arc/usdc-balance";
 
 const ARC_CHAIN = "Arc_Testnet" as const;
 
@@ -10,8 +11,8 @@ export async function fetchArcUsdcBalance(address: `0x${string}`): Promise<strin
     chain: arcTestnet,
     transport: http(arcTestnet.rpcUrls.default.http[0]),
   });
-  const wei = await client.getBalance({ address });
-  return formatUnits(wei, 6);
+  const raw = await client.getBalance({ address });
+  return rawUsdcToAmount(raw);
 }
 
 export type UsdcPayResult = {

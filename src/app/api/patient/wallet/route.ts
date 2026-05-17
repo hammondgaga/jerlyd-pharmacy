@@ -51,6 +51,28 @@ export async function PATCH(request: Request) {
     }
 
     const db = getDb();
+    const rows = await db
+      .select({ walletAddress: users.walletAddress })
+      .from(users)
+      .where(eq(users.id, auth.sub))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
+    }
+
+    const existing = row.walletAddress?.trim() || "";
+    if (existing) {
+      if (existing.toLowerCase() === walletAddress.toLowerCase()) {
+        return NextResponse.json({ walletAddress: existing });
+      }
+      return NextResponse.json(
+        { error: "A wallet address is already linked to this account." },
+        { status: 409 }
+      );
+    }
+
     await db.update(users).set({ walletAddress }).where(eq(users.id, auth.sub));
 
     return NextResponse.json({ walletAddress });

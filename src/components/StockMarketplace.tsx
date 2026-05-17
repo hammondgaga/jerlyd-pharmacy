@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatNaira, formatUsdc, nairaToUsdc } from "@/lib/exchange-rate";
 import { fetchArcUsdcBalance, payUsdcWithArc } from "@/lib/arc/pay-usdc";
-import { getOrCreatePatientWallet } from "@/lib/arc/patient-wallet";
+import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
+import { formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 
 export type MarketplaceItem = {
   id: number;
@@ -75,15 +76,17 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
 
   const refreshBalance = useCallback(async () => {
     try {
-      const { privateKey } = getOrCreatePatientWallet(userId, userEmail);
-      const { address } = getOrCreatePatientWallet(userId, userEmail);
-      void privateKey;
+      const address = await fetchPatientWalletAddress(api);
+      if (!address) {
+        setWalletBalance(null);
+        return;
+      }
       const bal = await fetchArcUsdcBalance(address);
       setWalletBalance(bal);
     } catch {
       setWalletBalance(null);
     }
-  }, [userId, userEmail]);
+  }, [api]);
 
   useEffect(() => {
     if (payment === "usdc") void refreshBalance();
@@ -125,11 +128,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
       let txHash = "";
 
       if (payment === "usdc") {
-        const { privateKey, address } = getOrCreatePatientWallet(userId, userEmail);
-        await api("/patient/wallet", {
-          method: "PATCH",
-          body: JSON.stringify({ walletAddress: address }),
-        });
+        const { privateKey, address } = await ensurePatientWallet(api, userId, userEmail);
         const bal = Number(await fetchArcUsdcBalance(address));
         if (bal < totals.usdc) {
           onFlash(
@@ -279,7 +278,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                 />
                 Pay with USDC (ARC Wallet)
                 {walletBalance !== null ? (
-                  <span className="muted"> — Balance: {Number(walletBalance).toFixed(2)} USDC</span>
+                  <span className="muted"> — Balance: {formatUsdcDisplay(walletBalance)} USDC</span>
                 ) : null}
               </label>
             </fieldset>
