@@ -1,7 +1,12 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { Pool, neonConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import ws from "ws";
 import * as schema from "./schema";
 
+// WebSocket driver required for Drizzle transactions (neon-http does not support them).
+neonConfig.webSocketConstructor = ws;
+
+let pool: Pool | null = null;
 let cached: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
 export function getDb() {
@@ -10,8 +15,8 @@ export function getDb() {
     throw new Error("DATABASE_URL is not set. Add a Postgres connection string for Neon or Vercel Postgres.");
   }
   if (!cached) {
-    const sql = neon(url);
-    cached = drizzle(sql, { schema });
+    pool = new Pool({ connectionString: url });
+    cached = drizzle(pool, { schema });
   }
   return cached;
 }

@@ -50,7 +50,8 @@ export async function GET(request: Request) {
       })),
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unauthorized";
+    console.error("[patient/orders GET]", e);
+    const msg = e instanceof Error ? e.message : "Could not load orders.";
     const status = msg.includes("authorization") || msg.includes("jwt") ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
+
     const result = await db.transaction(async (tx) => {
       const rows = await tx
         .select()
@@ -109,9 +111,8 @@ export async function POST(request: Request) {
       const unitUsdc = num(item.priceUsdc);
       const totalNaira = Math.round(unitNaira * quantity * 100) / 100;
       const totalUsdc = Math.round(unitUsdc * quantity * 1_000_000) / 1_000_000;
-
       const t = new Date().toISOString();
-      const status = paymentMethod === "card_naira" ? "pending" : "confirmed";
+      const status = paymentMethod === "usdc" ? "confirmed" : "pending";
 
       const inserted = await tx
         .insert(medicationOrders)
@@ -149,8 +150,22 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ order: result.order }, { status: 201 });
   } catch (e) {
+    console.error("[patient/orders POST]", e);
     const msg = e instanceof Error ? e.message : "Could not place order.";
-    const status = msg.includes("authorization") || msg.includes("jwt") ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    const status =
+      msg.includes("authorization") || msg.includes("jwt")
+        ? 401
+        : msg.includes("violates") || msg.includes("column")
+          ? 500
+          : 500;
+    return NextResponse.json(
+      {
+        error:
+          msg.includes("column") || msg.includes("does not exist")
+            ? "Order could not be saved. Database may need migration (run neon-init-v3.sql)."
+            : msg,
+      },
+      { status }
+    );
   }
 }
