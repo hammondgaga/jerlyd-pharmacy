@@ -1,19 +1,40 @@
-import { formatUnits } from "viem";
+import { createPublicClient, erc20Abi, formatUnits, http } from "viem";
+import { arcTestnet, arcTestnetUsdcAddress } from "@/lib/arc/chains";
 
-/** USDC on Arc uses 6 decimal places; on-chain balances are in smallest units (micro-USDC). */
+/** USDC ERC-20 interface on Arc testnet uses 6 decimal places. */
 export const USDC_DECIMALS = 6;
 export const USDC_MICRO = BigInt(1_000_000);
 
-/** Convert raw on-chain balance (smallest USDC units) to a human-readable decimal string. */
+function arcPublicClient() {
+  return createPublicClient({
+    chain: arcTestnet,
+    transport: http(arcTestnet.rpcUrls.default.http[0]),
+  });
+}
+
+/**
+ * Read spendable USDC for an address on Arc testnet.
+ * Uses the official USDC ERC-20 `balanceOf` (6 decimals), per Arc docs.
+ */
+export async function fetchArcUsdcBalance(address: `0x${string}`): Promise<string> {
+  const client = arcPublicClient();
+
+  const erc20Raw = await client.readContract({
+    address: arcTestnetUsdcAddress,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [address],
+  });
+
+  return formatUnits(erc20Raw, USDC_DECIMALS);
+}
+
+/** @deprecated Use fetchArcUsdcBalance; kept for callers passing pre-fetched raw units. */
 export function rawUsdcToAmount(raw: bigint): string {
-  // Arc testnet RPC sometimes returns 18-decimal wei; detect over-scaled values.
-  if (raw > BigInt(10) ** BigInt(15)) {
-    return formatUnits(raw, 18);
-  }
   return formatUnits(raw, USDC_DECIMALS);
 }
 
-/** Format a balance for UI (always 2 decimal places, e.g. "20.00"). */
+/** Format a human USDC amount for UI (always 2 decimal places, e.g. "20.00"). */
 export function formatUsdcDisplay(amount: string | number): string {
   const n = typeof amount === "number" ? amount : parseFloat(amount);
   if (!Number.isFinite(n)) return "0.00";

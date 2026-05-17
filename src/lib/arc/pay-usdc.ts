@@ -1,19 +1,10 @@
 "use client";
 
-import { createPublicClient, http } from "viem";
-import { arcTestnet } from "@/lib/arc/chains";
-import { rawUsdcToAmount } from "@/lib/arc/usdc-balance";
+import { fetchArcUsdcBalance } from "@/lib/arc/usdc-balance";
+
+export { fetchArcUsdcBalance };
 
 const ARC_CHAIN = "Arc_Testnet" as const;
-
-export async function fetchArcUsdcBalance(address: `0x${string}`): Promise<string> {
-  const client = createPublicClient({
-    chain: arcTestnet,
-    transport: http(arcTestnet.rpcUrls.default.http[0]),
-  });
-  const raw = await client.getBalance({ address });
-  return rawUsdcToAmount(raw);
-}
 
 export type UsdcPayResult = {
   txHash: string;

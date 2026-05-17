@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatNaira, formatUsdc, nairaToUsdc } from "@/lib/exchange-rate";
-import { fetchArcUsdcBalance, payUsdcWithArc } from "@/lib/arc/pay-usdc";
+import { payUsdcWithArc } from "@/lib/arc/pay-usdc";
+import { fetchArcUsdcBalance } from "@/lib/arc/usdc-balance";
 import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
 import { formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 
@@ -92,6 +93,10 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     if (payment === "usdc") void refreshBalance();
   }, [payment, refreshBalance]);
 
+  useEffect(() => {
+    void refreshBalance();
+  }, [refreshBalance]);
+
   const filtered = useMemo(() => {
     if (!items) return [];
     const q = query.trim().toLowerCase();
@@ -168,6 +173,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
       );
       await load();
       onOrdersChanged();
+      if (payment === "usdc") await refreshBalance();
     } catch (err) {
       onFlash((err as Error).message, "error");
     } finally {

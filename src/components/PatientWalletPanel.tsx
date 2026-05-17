@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchArcUsdcBalance } from "@/lib/arc/pay-usdc";
+import { fetchArcUsdcBalance, formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 import { ensurePatientWallet, fetchPatientWalletAddress, truncateAddress } from "@/lib/arc/patient-wallet";
-import { formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 import type { MarketplaceOrder } from "@/components/StockMarketplace";
 
 type Props = {
@@ -19,8 +18,21 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
   const [address, setAddress] = useState<string | null>(walletAddress || null);
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const loadBalance = useCallback(async (addr: `0x${string}`) => {
+    setBalanceLoading(true);
+    try {
+      const bal = await fetchArcUsdcBalance(addr);
+      setBalance(bal);
+    } catch {
+      setBalance(null);
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
 
   const syncWallet = useCallback(async () => {
     setLoading(true);
@@ -30,15 +42,13 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
 
       if (dbAddress) {
         setAddress(dbAddress);
-        const bal = await fetchArcUsdcBalance(dbAddress);
-        setBalance(bal);
+        await loadBalance(dbAddress);
         return;
       }
 
       const { address: addr, created } = await ensurePatientWallet(api, userId, email);
       setAddress(addr);
-      const bal = await fetchArcUsdcBalance(addr);
-      setBalance(bal);
+      await loadBalance(addr);
       if (created) onWalletLinked();
     } catch (err) {
       setError((err as Error).message);
@@ -46,11 +56,16 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
     } finally {
       setLoading(false);
     }
-  }, [userId, email, api, onWalletLinked]);
+  }, [userId, email, api, onWalletLinked, loadBalance]);
 
   useEffect(() => {
     void syncWallet();
   }, [syncWallet]);
+
+  useEffect(() => {
+    if (!address || loading) return;
+    void loadBalance(address as `0x${string}`);
+  }, [orders, address, loading, loadBalance]);
 
   const usdcOrders = orders.filter((o) => o.paymentMethod === "usdc");
 
@@ -60,6 +75,13 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const balanceLabel =
+    balance !== null
+      ? `${formatUsdcDisplay(balance)} USDC`
+      : balanceLoading
+        ? "Updating…"
+        : "—";
 
   return (
     <section className="panel wallet-panel">
@@ -95,12 +117,19 @@ export function PatientWalletPanel({ userId, email, walletAddress, orders, api, 
             <div>
               <dt>USDC balance (Arc testnet)</dt>
               <dd>
-                <strong>{balance !== null ? `${formatUsdcDisplay(balance)} USDC` : "—"}</strong>
+                <strong>{balanceLabel}</strong>
               </dd>
             </div>
           </dl>
-          <button type="button" className="btn btn-secondary" onClick={() => void syncWallet()}>
-            Refresh balance
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!address || balanceLoading}
+            onClick={() => {
+              if (address) void loadBalance(address as `0x${string}`);
+            }}
+          >
+            {balanceLoading ? "Refreshing…" : "Refresh balance"}
           </button>
         </>
       )}
