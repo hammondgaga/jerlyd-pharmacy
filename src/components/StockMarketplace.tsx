@@ -345,21 +345,17 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     return <p className="muted">Loading marketplace…</p>;
   }
 
+  const goBackToCategories = () => {
+    setView("home");
+    setQuery("");
+  };
+
+  const categoryProductCount =
+    view !== "home" ? (categories.find((c) => c.id === view)?.count ?? categoryItems.length) : 0;
+
   return (
     <div className="marketplace">
       <div className="marketplace-toolbar">
-        {view !== "home" ? (
-          <button
-            type="button"
-            className="btn btn-secondary marketplace-back"
-            onClick={() => {
-              setView("home");
-              setQuery("");
-            }}
-          >
-            ← Categories
-          </button>
-        ) : null}
         <input
           type="search"
           className="marketplace-search"
@@ -422,22 +418,34 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         </>
       ) : (
         <>
-          {activeCategory ? (
-            <header
-              className="category-page-header"
-              style={{ "--cat-color": activeCategory.color, "--cat-accent": activeCategory.accent } as CSSProperties}
+          <div className="category-page-shell">
+            <button
+              type="button"
+              className="category-page-back"
+              onClick={goBackToCategories}
+              aria-label="Back to category list"
             >
-              <span className="category-page-icon" style={{ color: activeCategory.color }}>
-                <CategoryIcon categoryId={activeCategory.id} />
-              </span>
-              <div>
-                <h3 className="category-page-title">{activeCategory.label}</h3>
-                <p className="muted category-page-sub">
-                  {categoryItems.length} available · tap a card to add to cart
-                </p>
-              </div>
-            </header>
-          ) : null}
+              ← Back to Categories
+            </button>
+            {activeCategory ? (
+              <header
+                className="category-page-header"
+                style={{ "--cat-color": activeCategory.color, "--cat-accent": activeCategory.accent } as CSSProperties}
+              >
+                <span className="category-page-icon" style={{ color: activeCategory.color }}>
+                  <CategoryIcon categoryId={activeCategory.id} />
+                </span>
+                <div className="category-page-heading">
+                  <h2 className="category-page-title">{activeCategory.label}</h2>
+                  <p className="category-page-count">
+                    {query.trim()
+                      ? `${categoryItems.length} ${categoryItems.length === 1 ? "result" : "results"}`
+                      : `${categoryProductCount} ${categoryProductCount === 1 ? "product" : "products"}`}
+                  </p>
+                </div>
+              </header>
+            ) : null}
+          </div>
 
           {categoryItems.length === 0 ? (
             <p className="empty-state muted">No medications in this category right now.</p>

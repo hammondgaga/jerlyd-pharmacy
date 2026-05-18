@@ -899,8 +899,44 @@ th {
   font-size: 0.95rem;
 }
 
-.marketplace-back {
-  flex-shrink: 0;
+.category-page-shell {
+  margin-bottom: 1.25rem;
+}
+
+.category-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--brand);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.category-page-back:hover {
+  background: var(--accent-soft);
+  border-color: var(--brand);
+  box-shadow: 0 2px 8px rgba(15, 110, 86, 0.08);
+}
+
+.category-page-back:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (min-width: 480px) {
+  .category-page-back {
+    width: auto;
+    min-width: 12rem;
+  }
 }
 
 .category-grid {
@@ -971,8 +1007,8 @@ th {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.25rem;
-  padding: 1rem 1.1rem;
+  margin: 0;
+  padding: 1.1rem 1.15rem;
   border-radius: var(--radius);
   background: var(--cat-accent, var(--accent-soft));
   border: 1px solid var(--line);
@@ -980,29 +1016,41 @@ th {
 
 .category-page-icon {
   flex-shrink: 0;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 3.5rem;
+  height: 3.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #fff;
   border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(15, 36, 32, 0.06);
 }
 
 .category-page-icon svg {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.category-page-heading {
+  min-width: 0;
+  flex: 1;
 }
 
 .category-page-title {
   margin: 0;
   font-family: var(--font-heading), Georgia, serif;
-  font-size: 1.25rem;
+  font-size: clamp(1.45rem, 4.5vw, 1.85rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
-.category-page-sub {
-  margin: 0.2rem 0 0;
-  font-size: 0.88rem;
+.category-page-count {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cat-color, var(--brand));
 }
 
 .med-grid {
