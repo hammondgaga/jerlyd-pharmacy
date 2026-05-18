@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { PharmacistRxPanel } from "@/components/PharmacistRxPanel";
 import { PatientWalletPanel } from "@/components/PatientWalletPanel";
+import { PharmacistStockForm } from "@/components/PharmacistStockForm";
 import { StockMarketplace, type MarketplaceOrder } from "@/components/StockMarketplace";
+import { getCategoryMeta } from "@/lib/marketplace-categories";
+import type { StockItemDto } from "@/lib/stock-catalog";
 import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
 
 const TOKEN_KEY = "jerlyd-session-token";
@@ -33,16 +36,7 @@ type Prescription = {
   updatedAt?: string;
 };
 
-type StockItem = {
-  id: number;
-  drugName: string;
-  description: string;
-  quantityOnHand: number;
-  unit: string;
-  isAvailable?: boolean;
-  priceNaira?: number;
-  priceUsdc?: number;
-};
+type StockItem = StockItemDto;
 
 type PatientOrder = {
   id: number;
@@ -126,6 +120,7 @@ export function PharmacyPortal() {
   const [pharmacistStock, setPharmacistStock] = useState<StockItem[] | null>(null);
   const [pharmacistOrders, setPharmacistOrders] = useState<PharmacistOrder[] | null>(null);
   const [showAddStock, setShowAddStock] = useState(false);
+  const [editingStockId, setEditingStockId] = useState<number | null>(null);
   const [addRxPatientId, setAddRxPatientId] = useState<string | null>(null);
   const [rxPanel, setRxPanel] = useState<
     | { open: false }
@@ -931,75 +926,62 @@ export function PharmacyPortal() {
                   </button>
                 </div>
                 {showAddStock ? (
-                  <form
-                    className="form-grid"
+                  <div
+                    className="pharmacist-stock-panel"
                     style={{ marginBottom: "1.25rem", padding: "1rem", border: "1px solid var(--line)", borderRadius: "var(--radius)" }}
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const fd = new FormData(e.currentTarget);
-                      try {
-                        await api("/pharmacist/stock", {
-                          method: "POST",
-                          body: JSON.stringify({
-                            drugName: String(fd.get("drugName") || ""),
-                            description: String(fd.get("description") || ""),
-                            quantityOnHand: Number(fd.get("quantityOnHand") || 0),
-                            unit: String(fd.get("unit") || "units"),
-                            isAvailable: fd.get("isAvailable") === "on",
-                            priceNaira: Number(fd.get("priceNaira") || 0),
-                            priceUsdc: Number(fd.get("priceUsdc") || 0),
-                          }),
-                        });
-                        setPharmacistStock(null);
-                        setShowAddStock(false);
-                        setFlash({ msg: "Stock item added.", kind: "success" });
-                      } catch (err) {
-                        setFlash({ msg: (err as Error).message, kind: "error" });
-                      }
-                    }}
                   >
-                    <div>
-                      <label htmlFor="stkName">Medication name</label>
-                      <input id="stkName" name="drugName" required />
-                    </div>
-                    <div>
-                      <label htmlFor="stkDesc">Description (optional)</label>
-                      <input id="stkDesc" name="description" />
-                    </div>
-                    <div className="form-grid two" style={{ gridColumn: "1 / -1" }}>
-                      <div>
-                        <label htmlFor="stkQty">Quantity on hand</label>
-                        <input id="stkQty" name="quantityOnHand" type="number" min={0} defaultValue={0} required />
-                      </div>
-                      <div>
-                        <label htmlFor="stkUnit">Unit</label>
-                        <input id="stkUnit" name="unit" defaultValue="units" placeholder="e.g. tablets, bottles" />
-                      </div>
-                    </div>
-                    <div className="form-grid two" style={{ gridColumn: "1 / -1" }}>
-                      <div>
-                        <label htmlFor="stkNaira">Price (₦ Naira)</label>
-                        <input id="stkNaira" name="priceNaira" type="number" min={0} step="0.01" defaultValue={0} />
-                      </div>
-                      <div>
-                        <label htmlFor="stkUsdc">Price (USDC)</label>
-                        <input id="stkUsdc" name="priceUsdc" type="number" min={0} step="0.000001" defaultValue={0} />
-                      </div>
-                    </div>
-                    <p className="muted" style={{ fontSize: "0.82rem", margin: 0 }}>
-                      If USDC is 0, the marketplace estimates it from the live ₦/USDC rate.
-                    </p>
-                    <div>
-                      <label>
-                        <input type="checkbox" name="isAvailable" defaultChecked /> Available for patient orders
-                      </label>
-                    </div>
-                    <div className="form-actions">
-                      <button type="submit" className="btn btn-primary">
-                        Save to stock list
-                      </button>
-                    </div>
-                  </form>
+                    <PharmacistStockForm
+                      submitLabel="Save to stock list"
+                      onCancel={() => setShowAddStock(false)}
+                      onSubmit={async (payload) => {
+                        try {
+                          await api("/pharmacist/stock", {
+                            method: "POST",
+                            body: JSON.stringify(payload),
+                          });
+                          setPharmacistStock(null);
+                          setShowAddStock(false);
+                          setFlash({ msg: "Stock item added.", kind: "success" });
+                        } catch (err) {
+                          setFlash({ msg: (err as Error).message, kind: "error" });
+                          throw err;
+                        }
+                      }}
+                    />
+                  </div>
+                ) : null}
+                {editingStockId !== null ? (
+                  <div
+                    className="pharmacist-stock-panel"
+                    style={{ marginBottom: "1.25rem", padding: "1rem", border: "1px solid var(--line)", borderRadius: "var(--radius)" }}
+                  >
+                    {(() => {
+                      const editing = pharmacistStock?.find((i) => i.id === editingStockId);
+                      if (!editing) return <p className="muted">Loading…</p>;
+                      return (
+                        <PharmacistStockForm
+                          key={editing.id}
+                          initial={editing}
+                          submitLabel="Update medication"
+                          onCancel={() => setEditingStockId(null)}
+                          onSubmit={async (payload) => {
+                            try {
+                              await api(`/pharmacist/stock/${editing.id}`, {
+                                method: "PATCH",
+                                body: JSON.stringify(payload),
+                              });
+                              setPharmacistStock(null);
+                              setEditingStockId(null);
+                              setFlash({ msg: "Stock updated.", kind: "success" });
+                            } catch (err) {
+                              setFlash({ msg: (err as Error).message, kind: "error" });
+                              throw err;
+                            }
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
                 ) : null}
                 {pharmacistStock.length === 0 ? (
                   <p className="muted">No stock items yet. Add medications patients can order.</p>
@@ -1011,103 +993,79 @@ export function PharmacyPortal() {
                           <th>Medication</th>
                           <th>In stock</th>
                           <th>Available</th>
-                          <th>Update</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {pharmacistStock.map((item) => (
-                          <tr key={item.id}>
-                            <td>
-                              <strong>{item.drugName}</strong>
-                              {item.description ? (
-                                <div className="muted" style={{ fontSize: "0.82rem" }}>
-                                  {item.description}
+                        {pharmacistStock.map((item) => {
+                          const cat = getCategoryMeta(item.category || "others");
+                          const packSummary =
+                            item.packs && item.packs.length > 0
+                              ? item.packs.map((p) => p.label).join(", ")
+                              : "—";
+                          return (
+                            <tr key={item.id}>
+                              <td>
+                                <div className="pharmacist-stock-row-name">
+                                  {item.imageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={item.imageUrl} alt="" className="pharmacist-stock-thumb" />
+                                  ) : (
+                                    <span className="pharmacist-stock-thumb pharmacist-stock-thumb--empty" />
+                                  )}
+                                  <div>
+                                    <strong>{item.drugName}</strong>
+                                    <span
+                                      className="category-pill"
+                                      style={{ background: cat.accent, color: cat.color }}
+                                    >
+                                      {cat.label}
+                                    </span>
+                                    {item.description ? (
+                                      <div className="muted" style={{ fontSize: "0.82rem" }}>
+                                        {item.description}
+                                      </div>
+                                    ) : null}
+                                    <div className="muted" style={{ fontSize: "0.82rem", marginTop: "0.25rem" }}>
+                                      Packs: {packSummary}
+                                    </div>
+                                  </div>
                                 </div>
-                              ) : null}
-                              <div className="muted" style={{ fontSize: "0.82rem", marginTop: "0.35rem" }}>
-                                ₦{Number(item.priceNaira || 0).toFixed(2)} · {Number(item.priceUsdc || 0).toFixed(4)} USDC
-                              </div>
-                            </td>
-                            <td>{item.quantityOnHand}</td>
-                            <td>{item.isAvailable !== false ? "Yes" : "No"}</td>
-                            <td>
-                              <form
-                                className="form-grid two"
-                                style={{ margin: 0 }}
-                                onSubmit={async (e) => {
-                                  e.preventDefault();
-                                  const fd = new FormData(e.currentTarget);
-                                  try {
-                                    await api(`/pharmacist/stock/${item.id}`, {
-                                      method: "PATCH",
-                                      body: JSON.stringify({
-                                        drugName: String(fd.get("drugName") || ""),
-                                        description: String(fd.get("description") || ""),
-                                        quantityOnHand: Number(fd.get("quantityOnHand") || 0),
-                                        unit: String(fd.get("unit") || "units"),
-                                        isAvailable: fd.get("isAvailable") === "on",
-                                        priceNaira: Number(fd.get("priceNaira") || 0),
-                                        priceUsdc: Number(fd.get("priceUsdc") || 0),
-                                      }),
-                                    });
-                                    setPharmacistStock(null);
-                                    setFlash({ msg: "Stock updated.", kind: "success" });
-                                  } catch (err) {
-                                    setFlash({ msg: (err as Error).message, kind: "error" });
-                                  }
-                                }}
-                              >
-                                <div>
-                                  <label className="sr-only">Name</label>
-                                  <input name="drugName" defaultValue={item.drugName} required />
-                                </div>
-                                <div>
-                                  <label className="sr-only">Qty</label>
-                                  <input name="quantityOnHand" type="number" min={0} defaultValue={item.quantityOnHand} />
-                                </div>
-                                <div>
-                                  <input name="description" defaultValue={item.description} placeholder="Description" />
-                                </div>
-                                <div>
-                                  <input name="unit" defaultValue={item.unit} />
-                                </div>
-                                <div>
-                                  <input name="priceNaira" type="number" min={0} step="0.01" defaultValue={item.priceNaira ?? 0} placeholder="₦ price" />
-                                </div>
-                                <div>
-                                  <input name="priceUsdc" type="number" min={0} step="0.000001" defaultValue={item.priceUsdc ?? 0} placeholder="USDC" />
-                                </div>
-                                <div>
-                                  <label>
-                                    <input type="checkbox" name="isAvailable" defaultChecked={item.isAvailable !== false} />{" "}
-                                    Available
-                                  </label>
-                                </div>
-                                <div className="row-actions">
-                                  <button type="submit" className="btn-small">
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn-small"
-                                    onClick={async () => {
-                                      if (!confirm(`Remove ${item.drugName} from stock list?`)) return;
-                                      try {
-                                        await api(`/pharmacist/stock/${item.id}`, { method: "DELETE" });
-                                        setPharmacistStock(null);
-                                        setFlash({ msg: "Stock item removed.", kind: "success" });
-                                      } catch (err) {
-                                        setFlash({ msg: (err as Error).message, kind: "error" });
-                                      }
-                                    }}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </form>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td>{item.quantityOnHand}</td>
+                              <td>{item.isAvailable !== false ? "Yes" : "No"}</td>
+                              <td className="row-actions">
+                                <button
+                                  type="button"
+                                  className="btn-small"
+                                  onClick={() => {
+                                    setEditingStockId(item.id);
+                                    setShowAddStock(false);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-small"
+                                  onClick={async () => {
+                                    if (!confirm(`Remove ${item.drugName} from stock list?`)) return;
+                                    try {
+                                      await api(`/pharmacist/stock/${item.id}`, { method: "DELETE" });
+                                      setPharmacistStock(null);
+                                      setEditingStockId(null);
+                                      setFlash({ msg: "Stock item removed.", kind: "success" });
+                                    } catch (err) {
+                                      setFlash({ msg: (err as Error).message, kind: "error" });
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

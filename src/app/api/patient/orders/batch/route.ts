@@ -2,17 +2,14 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { medicationOrders, stockItems } from "@/db/schema";
+import { resolvePackPricing } from "@/lib/stock-db";
 import { verifyBearer } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 const PAYMENT_METHODS = ["pending", "card_naira", "usdc"] as const;
 
-function num(v: string | null): number {
-  return Number(v || 0);
-}
-
-type CartLineInput = { stockItemId?: number; quantity?: number };
+type CartLineInput = { stockItemId?: number; packId?: number; quantity?: number };
 
 export async function POST(request: Request) {
   try {
@@ -36,14 +33,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Too many items in one order (max 50)." }, { status: 400 });
     }
 
-    const merged = new Map<number, number>();
+    const merged = new Map<string, { stockItemId: number; packId: number; quantity: number }>();
     for (const line of rawItems) {
       const stockItemId = Number(line.stockItemId);
+      const packId = Number(line.packId || 0);
       const quantity = Math.floor(Number(line.quantity));
       if (!stockItemId || quantity < 1 || quantity > 999) {
         return NextResponse.json({ error: "Each cart item needs a valid quantity (1–999)." }, { status: 400 });
       }
-      merged.set(stockItemId, (merged.get(stockItemId) || 0) + quantity);
+      const key = `${stockItemId}:${packId}`;
+      const prev = merged.get(key);
+      merged.set(key, {
+        stockItemId,
+        packId,
+        quantity: (prev?.quantity || 0) + quantity,
+      });
     }
 
     const patientNote = String(body.patientNote || "").trim().slice(0, 2000);
@@ -58,18 +62,20 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const cartLines = [...merged.entries()].map(([stockItemId, quantity]) => ({ stockItemId, quantity }));
+    const cartLines = [...merged.values()];
 
     const result = await db.transaction(async (tx) => {
       const prepared: {
         stockItemId: number;
+        packId: number | null;
+        packLabel: string;
         quantity: number;
-        item: (typeof stockItems.$inferSelect);
+        item: typeof stockItems.$inferSelect;
         totalNaira: number;
         totalUsdc: number;
       }[] = [];
 
-      for (const { stockItemId, quantity } of cartLines) {
+      for (const { stockItemId, packId, quantity } of cartLines) {
         const rows = await tx
           .select()
           .from(stockItems)
@@ -87,14 +93,15 @@ export async function POST(request: Request) {
           };
         }
 
-        const unitNaira = num(item.priceNaira);
-        const unitUsdc = num(item.priceUsdc);
+        const pricing = await resolvePackPricing(stockItemId, packId, item);
         prepared.push({
           stockItemId,
+          packId: pricing.packId,
+          packLabel: pricing.packLabel,
           quantity,
           item,
-          totalNaira: Math.round(unitNaira * quantity * 100) / 100,
-          totalUsdc: Math.round(unitUsdc * quantity * 1_000_000) / 1_000_000,
+          totalNaira: Math.round(pricing.unitNaira * quantity * 100) / 100,
+          totalUsdc: Math.round(pricing.unitUsdc * quantity * 1_000_000) / 1_000_000,
         });
       }
 
@@ -108,6 +115,8 @@ export async function POST(request: Request) {
           .values({
             patientUserId: auth.sub,
             stockItemId: line.stockItemId,
+            packId: line.packId,
+            packLabel: line.packLabel,
             quantity: line.quantity,
             status,
             patientNote,
@@ -150,7 +159,7 @@ export async function POST(request: Request) {
       {
         error:
           msg.includes("column") || msg.includes("does not exist")
-            ? "Order could not be saved. Database may need migration (run neon-init-v3.sql)."
+            ? "Order could not be saved. Database may need migration (run neon-init-v4.sql)."
             : msg,
       },
       { status }

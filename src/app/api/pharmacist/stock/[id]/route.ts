@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { stockItems } from "@/db/schema";
+import { normalizeCategory } from "@/lib/marketplace-categories";
+import { normalizeImageUrl, normalizePackInputs, num } from "@/lib/stock-catalog";
+import { fetchPacksByStockIds, mapStockRow, replaceStockPacks } from "@/lib/stock-db";
 import { verifyBearer } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -19,11 +22,15 @@ export async function PATCH(request: Request, ctx: Params) {
     const body = (await request.json()) as {
       drugName?: string;
       description?: string;
+      category?: string;
+      imageUrl?: string | null;
       quantityOnHand?: number;
       unit?: string;
       isAvailable?: boolean;
       priceNaira?: number;
       priceUsdc?: number;
+      packs?: unknown;
+      clearImage?: boolean;
     };
 
     const db = getDb();
@@ -36,6 +43,10 @@ export async function PATCH(request: Request, ctx: Params) {
     const drugName = body.drugName !== undefined ? String(body.drugName).trim() : row.drugName;
     const description =
       body.description !== undefined ? String(body.description).trim().slice(0, 2000) : row.description;
+    const category = body.category !== undefined ? normalizeCategory(body.category) : normalizeCategory(row.category);
+    let imageUrl = row.imageUrl;
+    if (body.clearImage) imageUrl = null;
+    else if (body.imageUrl !== undefined) imageUrl = normalizeImageUrl(body.imageUrl);
     const quantityOnHand =
       body.quantityOnHand !== undefined
         ? Math.max(0, Math.floor(Number(body.quantityOnHand)))
@@ -43,34 +54,47 @@ export async function PATCH(request: Request, ctx: Params) {
     const unit = body.unit !== undefined ? String(body.unit).trim().slice(0, 40) || "units" : row.unit;
     const isAvailable = body.isAvailable !== undefined ? Boolean(body.isAvailable) : row.isAvailable;
     const priceNaira =
-      body.priceNaira !== undefined ? Math.max(0, Number(body.priceNaira)) : Number(row.priceNaira || 0);
+      body.priceNaira !== undefined ? Math.max(0, Number(body.priceNaira)) : num(row.priceNaira);
     const priceUsdc =
-      body.priceUsdc !== undefined ? Math.max(0, Number(body.priceUsdc)) : Number(row.priceUsdc || 0);
+      body.priceUsdc !== undefined ? Math.max(0, Number(body.priceUsdc)) : num(row.priceUsdc);
+    const packs = body.packs !== undefined ? normalizePackInputs(body.packs) : null;
 
     if (!drugName) {
       return NextResponse.json({ error: "Medication name is required." }, { status: 400 });
     }
 
     const updatedAt = new Date().toISOString();
-    const updated = await db
-      .update(stockItems)
-      .set({
-        drugName,
-        description,
-        quantityOnHand,
-        unit,
-        isAvailable,
-        priceNaira: String(priceNaira.toFixed(2)),
-        priceUsdc: String(priceUsdc.toFixed(6)),
-        updatedByUserId: auth.sub,
-        updatedAt,
-      })
-      .where(eq(stockItems.id, id))
-      .returning();
 
-    return NextResponse.json({ item: updated[0] });
+    const updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(stockItems)
+        .set({
+          drugName,
+          description,
+          category,
+          imageUrl,
+          quantityOnHand,
+          unit,
+          isAvailable,
+          priceNaira: String(priceNaira.toFixed(2)),
+          priceUsdc: String(priceUsdc.toFixed(6)),
+          updatedByUserId: auth.sub,
+          updatedAt,
+        })
+        .where(eq(stockItems.id, id))
+        .returning();
+
+      if (packs !== null) {
+        await replaceStockPacks(id, packs, { priceNaira, priceUsdc, unit });
+      }
+
+      return rows[0];
+    });
+
+    const packMap = await fetchPacksByStockIds([id]);
+    return NextResponse.json({ item: mapStockRow(updated, packMap.get(id) || []) });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unauthorized";
+    const msg = e instanceof Error ? e.message : "Could not update stock.";
     const status = msg.includes("authorization") || msg.includes("jwt") ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }

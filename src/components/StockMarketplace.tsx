@@ -1,22 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { CategoryIcon, PillPlaceholder } from "@/components/CategoryIcon";
 import { formatNaira, formatUsdc, nairaToUsdc } from "@/lib/exchange-rate";
+import { getCategoryMeta } from "@/lib/marketplace-categories";
+import type { StockItemDto, StockPackDto } from "@/lib/stock-catalog";
 import { payUsdcWithArc } from "@/lib/arc/pay-usdc";
-import { fetchArcUsdcBalance } from "@/lib/arc/usdc-balance";
+import { fetchArcUsdcBalance, formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
-import { formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 
-export type MarketplaceItem = {
-  id: number;
-  drugName: string;
-  description: string;
-  quantityOnHand: number;
-  unit: string;
-  priceNaira: number;
-  priceUsdc: number;
-  inStock: boolean;
-};
+export type MarketplaceItem = StockItemDto;
 
 export type MarketplaceOrder = {
   id: number;
@@ -30,11 +23,22 @@ export type MarketplaceOrder = {
   totalUsdc: number;
   patientNote: string;
   pharmacistNote: string;
+  packLabel?: string;
   createdAt: string;
+};
+
+type CategorySummary = {
+  id: string;
+  label: string;
+  color: string;
+  accent: string;
+  count: number;
 };
 
 type CartLine = {
   stockItemId: number;
+  packId: number;
+  packLabel: string;
   drugName: string;
   unit: string;
   priceNaira: number;
@@ -46,7 +50,7 @@ type CartLine = {
 type OrderConfirmation = {
   paymentMethod: "card_naira" | "usdc";
   txHash?: string;
-  lines: { drugName: string; quantity: number; totalNaira: number; totalUsdc: number }[];
+  lines: { drugName: string; packLabel: string; quantity: number; totalNaira: number; totalUsdc: number }[];
   totalNaira: number;
   totalUsdc: number;
 };
@@ -59,8 +63,8 @@ type Props = {
   onOrdersChanged: () => void;
 };
 
-function unitUsdc(item: { priceNaira: number; priceUsdc: number }, ngnPerUsd: number): number {
-  return item.priceUsdc > 0 ? item.priceUsdc : nairaToUsdc(item.priceNaira, ngnPerUsd);
+function unitUsdc(pack: { priceNaira: number; priceUsdc: number }, ngnPerUsd: number): number {
+  return pack.priceUsdc > 0 ? pack.priceUsdc : nairaToUsdc(pack.priceNaira, ngnPerUsd);
 }
 
 function lineTotals(line: CartLine, ngnPerUsd: number) {
@@ -69,13 +73,24 @@ function lineTotals(line: CartLine, ngnPerUsd: number) {
   return { naira, usdc };
 }
 
+function defaultPackId(item: MarketplaceItem): number {
+  return item.packs[0]?.id ?? 0;
+}
+
+function getPack(item: MarketplaceItem, packId: number): StockPackDto {
+  return item.packs.find((p) => p.id === packId) ?? item.packs[0];
+}
+
 export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChanged }: Props) {
+  const [categories, setCategories] = useState<CategorySummary[] | null>(null);
   const [items, setItems] = useState<MarketplaceItem[] | null>(null);
   const [orders, setOrders] = useState<MarketplaceOrder[] | null>(null);
-  const [rateLabel, setRateLabel] = useState<string>("");
+  const [view, setView] = useState<"home" | string>("home");
+  const [rateLabel, setRateLabel] = useState("");
   const [ngnPerUsd, setNgnPerUsd] = useState(1580);
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [selectedPack, setSelectedPack] = useState<Record<number, number>>({});
   const [addQty, setAddQty] = useState<Record<number, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -86,11 +101,12 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
 
   const load = useCallback(async () => {
     const [stockRes, ordersRes, rateRes] = await Promise.all([
-      api<{ items: MarketplaceItem[] }>("/patient/stock"),
+      api<{ categories: CategorySummary[]; items: MarketplaceItem[] }>("/patient/stock"),
       api<{ orders: MarketplaceOrder[] }>("/patient/orders"),
       fetch("/api/exchange-rate").then((r) => r.json()),
     ]);
     const stock = stockRes.items || [];
+    setCategories(stockRes.categories || []);
     setItems(stock);
     setOrders(ordersRes.orders || []);
     if (rateRes.label) setRateLabel(rateRes.label);
@@ -101,12 +117,15 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         .map((line) => {
           const item = stock.find((i) => i.id === line.stockItemId);
           if (!item || !item.inStock) return null;
+          const pack = item.packs.find((p) => p.id === line.packId) ?? item.packs[0];
+          if (!pack) return null;
           return {
             ...line,
+            packLabel: pack.label,
             maxQty: item.quantityOnHand,
             quantity: Math.min(line.quantity, item.quantityOnHand),
-            priceNaira: item.priceNaira,
-            priceUsdc: item.priceUsdc,
+            priceNaira: pack.priceNaira,
+            priceUsdc: pack.priceUsdc,
           };
         })
         .filter((l): l is CartLine => l !== null)
@@ -115,6 +134,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
 
   useEffect(() => {
     void load().catch(() => {
+      setCategories([]);
       setItems([]);
       setOrders([]);
     });
@@ -138,16 +158,28 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     if (cartOpen && payment === "usdc") void refreshBalance();
   }, [cartOpen, payment, refreshBalance]);
 
-  const filtered = useMemo(() => {
-    if (!items) return [];
+  const activeCategory = view === "home" ? null : getCategoryMeta(view);
+
+  const categoryItems = useMemo(() => {
+    if (!items || view === "home") return [];
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (i) =>
-        i.drugName.toLowerCase().includes(q) ||
-        i.description.toLowerCase().includes(q)
-    );
-  }, [items, query]);
+    return items
+      .filter((i) => i.category === view && i.inStock)
+      .filter(
+        (i) =>
+          !q ||
+          i.drugName.toLowerCase().includes(q) ||
+          i.description.toLowerCase().includes(q) ||
+          i.packs.some((p) => p.label.toLowerCase().includes(q))
+      );
+  }, [items, view, query]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categories) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return categories;
+    return categories.filter((c) => c.label.toLowerCase().includes(q));
+  }, [categories, query]);
 
   const cartCount = useMemo(() => cart.reduce((n, l) => n + l.quantity, 0), [cart]);
 
@@ -171,9 +203,12 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     [cartTotals]
   );
 
+  const getSelectedPackId = (item: MarketplaceItem) => selectedPack[item.id] ?? defaultPackId(item);
   const getAddQty = (id: number) => addQty[id] ?? 1;
 
   const addToCart = (item: MarketplaceItem) => {
+    const packId = getSelectedPackId(item);
+    const pack = getPack(item, packId);
     const qty = Math.floor(getAddQty(item.id));
     if (qty < 1) {
       onFlash("Enter a quantity of at least 1.", "error");
@@ -185,11 +220,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     }
 
     setCart((prev) => {
-      const existing = prev.find((l) => l.stockItemId === item.id);
+      const existing = prev.find((l) => l.stockItemId === item.id && l.packId === packId);
       if (existing) {
         const nextQty = Math.min(existing.quantity + qty, item.quantityOnHand);
         return prev.map((l) =>
-          l.stockItemId === item.id
+          l.stockItemId === item.id && l.packId === packId
             ? { ...l, quantity: nextQty, maxQty: item.quantityOnHand }
             : l
         );
@@ -198,31 +233,33 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         ...prev,
         {
           stockItemId: item.id,
+          packId,
+          packLabel: pack.label,
           drugName: item.drugName,
           unit: item.unit,
-          priceNaira: item.priceNaira,
-          priceUsdc: item.priceUsdc,
+          priceNaira: pack.priceNaira,
+          priceUsdc: pack.priceUsdc,
           maxQty: item.quantityOnHand,
           quantity: qty,
         },
       ];
     });
-    onFlash(`${item.drugName} added to cart.`, "success");
+    onFlash(`${item.drugName} (${pack.label}) added to cart.`, "success");
     setAddQty((prev) => ({ ...prev, [item.id]: 1 }));
   };
 
-  const updateCartQty = (stockItemId: number, quantity: number) => {
+  const updateCartQty = (stockItemId: number, packId: number, quantity: number) => {
     setCart((prev) =>
       prev.map((l) =>
-        l.stockItemId === stockItemId
+        l.stockItemId === stockItemId && l.packId === packId
           ? { ...l, quantity: Math.max(1, Math.min(quantity, l.maxQty)) }
           : l
       )
     );
   };
 
-  const removeFromCart = (stockItemId: number) => {
-    setCart((prev) => prev.filter((l) => l.stockItemId !== stockItemId));
+  const removeFromCart = (stockItemId: number, packId: number) => {
+    setCart((prev) => prev.filter((l) => !(l.stockItemId === stockItemId && l.packId === packId)));
   };
 
   const checkoutCart = async () => {
@@ -261,7 +298,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
       await api("/patient/orders/batch", {
         method: "POST",
         body: JSON.stringify({
-          items: cart.map((l) => ({ stockItemId: l.stockItemId, quantity: l.quantity })),
+          items: cart.map((l) => ({
+            stockItemId: l.stockItemId,
+            packId: l.packId,
+            quantity: l.quantity,
+          })),
           patientNote: note,
           paymentMethod: payment,
           txHash: payment === "usdc" ? txHash : undefined,
@@ -270,7 +311,13 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
 
       const confirmLines = cart.map((l) => {
         const t = lineTotals(l, ngnPerUsd);
-        return { drugName: l.drugName, quantity: l.quantity, totalNaira: t.naira, totalUsdc: t.usdc };
+        return {
+          drugName: l.drugName,
+          packLabel: l.packLabel,
+          quantity: l.quantity,
+          totalNaira: t.naira,
+          totalUsdc: t.usdc,
+        };
       });
 
       setConfirmation({
@@ -294,20 +341,32 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     }
   };
 
-  if (items === null || orders === null) {
+  if (categories === null || items === null || orders === null) {
     return <p className="muted">Loading marketplace…</p>;
   }
 
   return (
     <div className="marketplace">
       <div className="marketplace-toolbar">
+        {view !== "home" ? (
+          <button
+            type="button"
+            className="btn btn-secondary marketplace-back"
+            onClick={() => {
+              setView("home");
+              setQuery("");
+            }}
+          >
+            ← Categories
+          </button>
+        ) : null}
         <input
           type="search"
           className="marketplace-search"
-          placeholder="Search medications…"
+          placeholder={view === "home" ? "Search categories…" : "Search in this category…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search stock"
+          aria-label={view === "home" ? "Search categories" : "Search medications"}
         />
         {rateLabel ? <p className="muted marketplace-rate">{rateLabel}</p> : null}
         <button
@@ -329,54 +388,132 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         </button>
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="empty-state muted">No medications match your search.</p>
+      {view === "home" ? (
+        <>
+          <p className="marketplace-intro muted">Browse medications by category.</p>
+          {filteredCategories.length === 0 ? (
+            <p className="empty-state muted">No categories match your search.</p>
+          ) : (
+            <div className="category-grid">
+              {filteredCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className="category-card"
+                  style={{ "--cat-color": cat.color, "--cat-accent": cat.accent } as CSSProperties}
+                  onClick={() => {
+                    setView(cat.id);
+                    setQuery("");
+                  }}
+                >
+                  <span className="category-card-icon" style={{ color: cat.color }}>
+                    <CategoryIcon categoryId={cat.id} />
+                  </span>
+                  <span className="category-card-body">
+                    <strong>{cat.label}</strong>
+                    <span className="muted">
+                      {cat.count} {cat.count === 1 ? "product" : "products"}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="stock-grid">
-          {filtered.map((item) => (
-            <article key={item.id} className={`stock-card${!item.inStock ? " stock-card--out" : ""}`}>
-              <h3>{item.drugName}</h3>
-              {item.description ? <p className="muted">{item.description}</p> : null}
-              <p className="stock-prices">
-                <strong>{formatNaira(item.priceNaira)}</strong>
-                <span className="price-sep"> · </span>
-                <strong>{formatUsdc(unitUsdc(item, ngnPerUsd))}</strong>
-                <span className="muted"> / {item.unit}</span>
-              </p>
-              <p className="muted" style={{ fontSize: "0.88rem" }}>
-                {item.inStock ? (
-                  <>
-                    <strong>{item.quantityOnHand}</strong> available
-                  </>
-                ) : (
-                  <strong>Out of stock</strong>
-                )}
-              </p>
-              {item.inStock ? (
-                <div className="add-to-cart-row">
-                  <div>
-                    <label className="sr-only" htmlFor={`qty-${item.id}`}>
-                      Quantity for {item.drugName}
-                    </label>
-                    <input
-                      id={`qty-${item.id}`}
-                      type="number"
-                      min={1}
-                      max={item.quantityOnHand}
-                      value={getAddQty(item.id)}
-                      onChange={(e) =>
-                        setAddQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
-                      }
-                    />
-                  </div>
-                  <button type="button" className="btn btn-primary" onClick={() => addToCart(item)}>
-                    Add to cart
-                  </button>
-                </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
+        <>
+          {activeCategory ? (
+            <header
+              className="category-page-header"
+              style={{ "--cat-color": activeCategory.color, "--cat-accent": activeCategory.accent } as CSSProperties}
+            >
+              <span className="category-page-icon" style={{ color: activeCategory.color }}>
+                <CategoryIcon categoryId={activeCategory.id} />
+              </span>
+              <div>
+                <h3 className="category-page-title">{activeCategory.label}</h3>
+                <p className="muted category-page-sub">
+                  {categoryItems.length} available · tap a card to add to cart
+                </p>
+              </div>
+            </header>
+          ) : null}
+
+          {categoryItems.length === 0 ? (
+            <p className="empty-state muted">No medications in this category right now.</p>
+          ) : (
+            <div className="med-grid">
+              {categoryItems.map((item) => {
+                const packId = getSelectedPackId(item);
+                const pack = getPack(item, packId);
+                return (
+                  <article key={item.id} className="med-card">
+                    <div className="med-card-media">
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.imageUrl} alt="" className="med-card-img" />
+                      ) : (
+                        <PillPlaceholder className="med-card-placeholder" />
+                      )}
+                    </div>
+                    <div className="med-card-body">
+                      <h3>{item.drugName}</h3>
+                      {item.description ? <p className="muted med-card-desc">{item.description}</p> : null}
+                      <p className="med-card-prices">
+                        <strong>{formatNaira(pack.priceNaira)}</strong>
+                        <span className="price-sep"> · </span>
+                        <strong>{formatUsdc(unitUsdc(pack, ngnPerUsd))}</strong>
+                      </p>
+                      <p className="muted med-card-stock">
+                        <strong>{item.quantityOnHand}</strong> in stock · {item.unit}
+                      </p>
+                      {item.packs.length > 1 || (item.packs[0] && item.packs[0].id !== 0) ? (
+                        <div className="med-card-pack">
+                          <label htmlFor={`pack-${item.id}`}>Pack size</label>
+                          <select
+                            id={`pack-${item.id}`}
+                            value={packId}
+                            onChange={(e) =>
+                              setSelectedPack((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+                            }
+                          >
+                            {item.packs.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label} — {formatNaira(p.priceNaira)} · {formatUsdc(unitUsdc(p, ngnPerUsd))}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : item.packs[0] ? (
+                        <p className="muted med-card-pack-label">Pack: {item.packs[0].label}</p>
+                      ) : null}
+                      <div className="add-to-cart-row">
+                        <div>
+                          <label className="sr-only" htmlFor={`qty-${item.id}`}>
+                            Quantity for {item.drugName}
+                          </label>
+                          <input
+                            id={`qty-${item.id}`}
+                            type="number"
+                            min={1}
+                            max={item.quantityOnHand}
+                            value={getAddQty(item.id)}
+                            onChange={(e) =>
+                              setAddQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
+                            }
+                          />
+                        </div>
+                        <button type="button" className="btn btn-primary" onClick={() => addToCart(item)}>
+                          Add to cart
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {cartOpen ? (
@@ -403,29 +540,32 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                   {cart.map((line) => {
                     const t = lineTotals(line, ngnPerUsd);
                     return (
-                      <li key={line.stockItemId} className="cart-line">
+                      <li key={`${line.stockItemId}-${line.packId}`} className="cart-line">
                         <div className="cart-line-head">
                           <strong>{line.drugName}</strong>
                           <button
                             type="button"
                             className="btn-small cart-line-remove"
-                            onClick={() => removeFromCart(line.stockItemId)}
+                            onClick={() => removeFromCart(line.stockItemId, line.packId)}
                           >
                             Remove
                           </button>
                         </div>
                         <p className="muted cart-line-unit">
-                          {formatNaira(line.priceNaira)} · {formatUsdc(unitUsdc(line, ngnPerUsd))} / {line.unit}
+                          {line.packLabel} · {formatNaira(line.priceNaira)} ·{" "}
+                          {formatUsdc(unitUsdc(line, ngnPerUsd))} / {line.unit}
                         </p>
                         <div className="cart-line-qty">
-                          <label htmlFor={`cart-qty-${line.stockItemId}`}>Qty</label>
+                          <label htmlFor={`cart-qty-${line.stockItemId}-${line.packId}`}>Qty</label>
                           <input
-                            id={`cart-qty-${line.stockItemId}`}
+                            id={`cart-qty-${line.stockItemId}-${line.packId}`}
                             type="number"
                             min={1}
                             max={line.maxQty}
                             value={line.quantity}
-                            onChange={(e) => updateCartQty(line.stockItemId, Number(e.target.value))}
+                            onChange={(e) =>
+                              updateCartQty(line.stockItemId, line.packId, Number(e.target.value))
+                            }
                           />
                           <span className="muted">max {line.maxQty}</span>
                         </div>
@@ -499,9 +639,9 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
             </p>
             <ul className="confirm-lines">
               {confirmation.lines.map((line) => (
-                <li key={`${line.drugName}-${line.quantity}`}>
-                  <strong>{line.drugName}</strong> × {line.quantity} — {formatNaira(line.totalNaira)} ·{" "}
-                  {formatUsdc(line.totalUsdc)}
+                <li key={`${line.drugName}-${line.packLabel}-${line.quantity}`}>
+                  <strong>{line.drugName}</strong> ({line.packLabel}) × {line.quantity} —{" "}
+                  {formatNaira(line.totalNaira)} · {formatUsdc(line.totalUsdc)}
                 </li>
               ))}
             </ul>
@@ -540,7 +680,8 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
               {orders.map((o) => (
                 <tr key={o.id}>
                   <td>
-                    {o.drugName} × {o.quantity}
+                    {o.drugName}
+                    {o.packLabel ? <span className="muted"> · {o.packLabel}</span> : null} × {o.quantity}
                   </td>
                   <td>
                     {formatNaira(o.totalNaira)}

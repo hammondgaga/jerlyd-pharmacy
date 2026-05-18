@@ -43,6 +43,8 @@ export const stockItems = pgTable("stock_items", {
   id: serial("id").primaryKey(),
   drugName: text("drug_name").notNull(),
   description: text("description").notNull().default(""),
+  category: text("category").notNull().default("others"),
+  imageUrl: text("image_url"),
   quantityOnHand: integer("quantity_on_hand").notNull().default(0),
   unit: text("unit").notNull().default("units"),
   isAvailable: boolean("is_available").notNull().default(true),
@@ -52,6 +54,21 @@ export const stockItems = pgTable("stock_items", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const stockItemPacks = pgTable(
+  "stock_item_packs",
+  {
+    id: serial("id").primaryKey(),
+    stockItemId: integer("stock_item_id")
+      .notNull()
+      .references(() => stockItems.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    priceNaira: numeric("price_naira", { precision: 10, scale: 2 }).notNull().default("0"),
+    priceUsdc: numeric("price_usdc", { precision: 10, scale: 6 }).notNull().default("0"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("idx_stock_packs_item").on(t.stockItemId)]
+);
 
 export const medicationOrders = pgTable(
   "medication_orders",
@@ -63,6 +80,8 @@ export const medicationOrders = pgTable(
     stockItemId: integer("stock_item_id")
       .notNull()
       .references(() => stockItems.id),
+    packId: integer("pack_id").references(() => stockItemPacks.id),
+    packLabel: text("pack_label").notNull().default(""),
     quantity: integer("quantity").notNull(),
     status: text("status").notNull().default("pending"),
     patientNote: text("patient_note").notNull().default(""),

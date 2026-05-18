@@ -892,3 +892,301 @@ th {
 .wallet-panel .wallet-stats dd {
   margin: 0;
 }
+
+/* —— Category marketplace —— */
+.marketplace-intro {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+}
+
+.marketplace-back {
+  flex-shrink: 0;
+}
+
+.category-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+@media (min-width: 520px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .category-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.category-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--cat-accent, var(--accent-soft));
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+
+.category-card:hover {
+  border-color: var(--cat-color, var(--brand));
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.category-card-icon {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.category-card-icon svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.category-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.category-card-body strong {
+  font-size: 1.02rem;
+  color: var(--ink);
+}
+
+.category-page-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
+  background: var(--cat-accent, var(--accent-soft));
+  border: 1px solid var(--line);
+}
+
+.category-page-icon {
+  flex-shrink: 0;
+  width: 3.25rem;
+  height: 3.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 12px;
+}
+
+.category-page-icon svg {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.category-page-title {
+  margin: 0;
+  font-family: var(--font-heading), Georgia, serif;
+  font-size: 1.25rem;
+}
+
+.category-page-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.88rem;
+}
+
+.med-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .med-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .med-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.med-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fafcfb;
+  overflow: hidden;
+}
+
+.med-card-media {
+  aspect-ratio: 4 / 3;
+  background: #eef5f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.med-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.med-card-placeholder {
+  width: 4rem;
+  height: 4rem;
+  color: var(--brand);
+  opacity: 0.45;
+}
+
+.med-card-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.med-card-body h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.med-card-desc {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.med-card-prices {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.med-card-stock {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+}
+
+.med-card-pack {
+  margin-bottom: 0.65rem;
+}
+
+.med-card-pack label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+}
+
+.med-card-pack select {
+  width: 100%;
+  font-size: 0.88rem;
+}
+
+.med-card-pack-label {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+}
+
+.med-card .add-to-cart-row {
+  margin-top: auto;
+}
+
+/* —— Pharmacist stock form —— */
+.pharmacist-stock-form .stock-image-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.stock-image-preview {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.stock-image-preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: #f4f8f6;
+}
+
+.pack-sizes-fieldset {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin: 0;
+}
+
+.pack-sizes-fieldset legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.pack-size-row {
+  display: grid;
+  grid-template-columns: 1fr 5rem 5.5rem auto;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 520px) {
+  .pack-size-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pack-size-row button {
+    grid-column: 2;
+  }
+}
+
+.category-pill {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.pharmacist-stock-row-name {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.pharmacist-stock-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.pharmacist-stock-thumb--empty {
+  display: block;
+  background: #eef5f2;
+}
