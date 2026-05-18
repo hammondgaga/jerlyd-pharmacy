@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { CategoryIcon, PillPlaceholder } from "@/components/CategoryIcon";
+import { CategoryIcon } from "@/components/CategoryIcon";
+import { MedicationCard } from "@/components/MedicationCard";
 import { formatNaira, formatUsdc, nairaToUsdc } from "@/lib/exchange-rate";
 import { getCategoryMeta } from "@/lib/marketplace-categories";
 import type { StockItemDto, StockPackDto } from "@/lib/stock-catalog";
@@ -455,68 +456,17 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                 const packId = getSelectedPackId(item);
                 const pack = getPack(item, packId);
                 return (
-                  <article key={item.id} className="med-card">
-                    <div className="med-card-media">
-                      {item.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageUrl} alt="" className="med-card-img" />
-                      ) : (
-                        <PillPlaceholder className="med-card-placeholder" />
-                      )}
-                    </div>
-                    <div className="med-card-body">
-                      <h3>{item.drugName}</h3>
-                      {item.description ? <p className="muted med-card-desc">{item.description}</p> : null}
-                      <p className="med-card-prices">
-                        <strong>{formatNaira(pack.priceNaira)}</strong>
-                        <span className="price-sep"> · </span>
-                        <strong>{formatUsdc(unitUsdc(pack, ngnPerUsd))}</strong>
-                      </p>
-                      <p className="muted med-card-stock">
-                        <strong>{item.quantityOnHand}</strong> in stock · {item.unit}
-                      </p>
-                      {item.packs.length > 1 || (item.packs[0] && item.packs[0].id !== 0) ? (
-                        <div className="med-card-pack">
-                          <label htmlFor={`pack-${item.id}`}>Pack size</label>
-                          <select
-                            id={`pack-${item.id}`}
-                            value={packId}
-                            onChange={(e) =>
-                              setSelectedPack((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
-                            }
-                          >
-                            {item.packs.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.label} — {formatNaira(p.priceNaira)} · {formatUsdc(unitUsdc(p, ngnPerUsd))}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : item.packs[0] ? (
-                        <p className="muted med-card-pack-label">Pack: {item.packs[0].label}</p>
-                      ) : null}
-                      <div className="add-to-cart-row">
-                        <div>
-                          <label className="sr-only" htmlFor={`qty-${item.id}`}>
-                            Quantity for {item.drugName}
-                          </label>
-                          <input
-                            id={`qty-${item.id}`}
-                            type="number"
-                            min={1}
-                            max={item.quantityOnHand}
-                            value={getAddQty(item.id)}
-                            onChange={(e) =>
-                              setAddQty((prev) => ({ ...prev, [item.id]: Number(e.target.value) }))
-                            }
-                          />
-                        </div>
-                        <button type="button" className="btn btn-primary" onClick={() => addToCart(item)}>
-                          Add to cart
-                        </button>
-                      </div>
-                    </div>
-                  </article>
+                  <MedicationCard
+                    key={item.id}
+                    item={item}
+                    packId={packId}
+                    pack={pack}
+                    quantity={getAddQty(item.id)}
+                    ngnPerUsd={ngnPerUsd}
+                    onPackChange={(id) => setSelectedPack((prev) => ({ ...prev, [item.id]: id }))}
+                    onQuantityChange={(qty) => setAddQty((prev) => ({ ...prev, [item.id]: qty }))}
+                    onAddToCart={() => addToCart(item)}
+                  />
                 );
               })}
             </div>

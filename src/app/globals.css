@@ -1055,7 +1055,7 @@ th {
 
 .med-grid {
   display: grid;
-  gap: 1rem;
+  gap: 1.15rem;
 }
 
 @media (min-width: 640px) {
@@ -1070,88 +1070,284 @@ th {
   }
 }
 
+/* —— Medication product cards —— */
 .med-card {
   display: flex;
   flex-direction: column;
+  height: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #fafcfb;
+  border-radius: calc(var(--radius) + 2px);
+  background: #ffffff;
   overflow: hidden;
+  box-shadow: 0 2px 14px rgba(15, 36, 32, 0.06);
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+
+.med-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(15, 110, 86, 0.35);
+  box-shadow:
+    0 14px 32px rgba(15, 110, 86, 0.12),
+    0 0 0 1px rgba(15, 110, 86, 0.08);
 }
 
 .med-card-media {
-  aspect-ratio: 4 / 3;
-  background: #eef5f2;
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(165deg, #f0f8f5 0%, #e8f2ee 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .med-card-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.med-card:hover .med-card-img {
+  transform: scale(1.04);
+}
+
+.med-card-media-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .med-card-placeholder {
-  width: 4rem;
-  height: 4rem;
+  width: 5rem;
+  height: 5rem;
   color: var(--brand);
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
 .med-card-body {
-  padding: 1rem;
+  padding: 1rem 1.05rem 1.1rem;
   display: flex;
   flex-direction: column;
   flex: 1;
+  gap: 0.35rem;
 }
 
-.med-card-body h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
+.med-card-name {
+  margin: 0;
+  font-family: var(--font-heading), Georgia, serif;
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .med-card-desc {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.med-card-prices {
-  margin: 0 0 0.35rem;
-  font-size: 0.95rem;
+.med-card-pack-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+}
+
+.med-card-pack-badge-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.med-card-pack-badge-value {
+  font-weight: 600;
+  color: var(--brand);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.med-card-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.35rem 0 0.15rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(15, 110, 86, 0.1);
+}
+
+.med-card-price-main {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.med-card-price-usdc {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--brand);
 }
 
 .med-card-stock {
-  margin: 0 0 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.1rem 0 0.25rem;
   font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.med-card-stock-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.med-card-stock--high {
+  color: #0d6b4f;
+}
+
+.med-card-stock--high .med-card-stock-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+.med-card-stock--low {
+  color: #9a3412;
+}
+
+.med-card-stock--low .med-card-stock-dot {
+  background: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.25);
+}
+
+.med-card-stock-unit {
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .med-card-pack {
-  margin-bottom: 0.65rem;
+  margin: 0.15rem 0 0.25rem;
 }
 
 .med-card-pack label {
   display: block;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.med-card-pack select {
+.med-card-pack-select {
   width: 100%;
   font-size: 0.88rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
 }
 
-.med-card-pack-label {
-  margin: 0 0 0.65rem;
-  font-size: 0.85rem;
-}
-
-.med-card .add-to-cart-row {
+.med-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
   margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.med-card-qty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.med-card-qty label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.med-card-qty input {
+  width: 4.25rem;
+  padding: 0.5rem 0.55rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.med-card-add-btn {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: var(--brand);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  box-shadow: 0 4px 12px rgba(15, 110, 86, 0.25);
+}
+
+.med-card-add-btn:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 6px 16px rgba(15, 110, 86, 0.32);
+}
+
+.med-card-add-btn:active {
+  transform: scale(0.98);
+}
+
+.med-card-add-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (min-width: 480px) {
+  .med-card-actions {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .med-card-qty {
+    flex: 0 0 auto;
+  }
+
+  .med-card-add-btn {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 /* —— Pharmacist stock form —— */
