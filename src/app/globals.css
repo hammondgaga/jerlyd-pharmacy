@@ -1158,6 +1158,69 @@ th {
   margin-top: 0.2rem;
 }
 
+.wallet-built-in {
+  margin-bottom: 0.25rem;
+}
+
+.wallet-status-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--brand);
+}
+
+.wallet-inline-loading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.wallet-address-full {
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.wallet-error-banner {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  color: #b42318;
+  font-size: 0.9rem;
+}
+
+.wallet-faucet {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.wallet-faucet-link {
+  font-weight: 600;
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wallet-faucet-link:hover {
+  color: #0a5c47;
+}
+
+.wallet-faucet-hint {
+  display: inline;
+}
+
+@media (max-width: 520px) {
+  .wallet-faucet-hint {
+    display: block;
+    margin-top: 0.35rem;
+  }
+}
+
 /* —— Category marketplace —— */
 .marketplace-intro {
   margin: 0 0 1rem;

@@ -21,6 +21,8 @@ import {
 } from "@/lib/arc/payment-preference";
 import type { MarketplaceOrder } from "@/components/StockMarketplace";
 
+const ARC_FAUCET_URL = "https://faucet.circle.com/";
+
 interface Props {
   token: string;
   userId: number;
@@ -28,10 +30,20 @@ interface Props {
   orders: MarketplaceOrder[];
 }
 
+type BuiltInWalletStatus = "loading" | "generating" | "ready" | "error";
+
+function apiPath(path: string): string {
+  if (path.startsWith("/api")) return path;
+  return `/api${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) {
   const [autoAddress, setAutoAddress] = useState<string | null>(null);
   const [autoBalance, setAutoBalance] = useState<string | null>(null);
-  const [autoLoading, setAutoLoading] = useState(true);
+  const [builtInStatus, setBuiltInStatus] = useState<BuiltInWalletStatus>("loading");
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [hasSigningKey, setHasSigningKey] = useState(false);
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -51,47 +63,86 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
 
   const api = useCallback(
     async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
-      const res = await fetch(path, {
+      const res = await fetch(apiPath(path), {
         ...init,
         headers: {
+          Accept: "application/json",
           ...init?.headers,
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(err.error ?? `API error: ${res.status}`);
+      const text = await res.text();
+      let data: { error?: string } & Record<string, unknown> = {};
+      try {
+        data = text ? (JSON.parse(text) as typeof data) : {};
+      } catch {
+        data = { error: text || res.statusText };
       }
-      return res.json();
+      if (!res.ok) {
+        throw new Error((data.error as string) || res.statusText || `Request failed (${res.status})`);
+      }
+      return data as T;
     },
     [token]
   );
 
-  const loadAutoWallet = useCallback(async () => {
-    setAutoLoading(true);
+  const loadBalance = useCallback(async (addr: `0x${string}`) => {
+    setBalanceLoading(true);
+    setBalanceError(null);
     try {
-      let addr = await fetchPatientWalletAddress(api);
-      if (!addr) {
-        await ensurePatientWallet(api, userId, userEmail);
-        addr = await fetchPatientWalletAddress(api);
+      const bal = await fetchArcUsdcBalance(addr);
+      setAutoBalance(formatUsdcDisplay(bal));
+    } catch (e) {
+      setAutoBalance(null);
+      setBalanceError(e instanceof Error ? e.message : "Could not load USDC balance.");
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
+
+  const loadAutoWallet = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) {
+        setBuiltInStatus("loading");
+        setWalletError(null);
+        setBalanceError(null);
       }
-      setAutoAddress(addr);
-      if (addr) {
-        const bal = await fetchArcUsdcBalance(addr);
-        setAutoBalance(formatUsdcDisplay(bal));
-      }
+
       try {
-        await ensurePatientWallet(api, userId, userEmail);
-        setHasSigningKey(true);
-      } catch {
+        let addr = await fetchPatientWalletAddress(api);
+
+        if (!addr) {
+          setBuiltInStatus("generating");
+          const created = await ensurePatientWallet(api, userId, userEmail);
+          addr = created.address;
+          setHasSigningKey(true);
+        } else {
+          try {
+            await ensurePatientWallet(api, userId, userEmail);
+            setHasSigningKey(true);
+          } catch {
+            setHasSigningKey(false);
+          }
+        }
+
+        if (!addr) {
+          throw new Error("Wallet address could not be loaded. Try refreshing.");
+        }
+
+        setAutoAddress(addr);
+        setBuiltInStatus("ready");
+        await loadBalance(addr);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Could not load your in-built wallet.";
+        setWalletError(message);
+        setBuiltInStatus("error");
+        setAutoAddress(null);
+        setAutoBalance(null);
         setHasSigningKey(false);
       }
-    } catch {
-      setAutoBalance("—");
-      setHasSigningKey(false);
-    }
-    setAutoLoading(false);
-  }, [api, userId, userEmail]);
+    },
+    [api, userId, userEmail, loadBalance]
+  );
 
   const refreshMmBalance = useCallback(async (address: string) => {
     const bal = await fetchMetaMaskUsdcBalance(address);
@@ -133,6 +184,10 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
     setPaymentWalletState(wallet);
   }
 
+  async function handleRefreshWallet() {
+    await loadAutoWallet();
+  }
+
   async function handleWithdraw() {
     const amount = Number(withdrawAmount);
     if (!/^0x[a-fA-F0-9]{40}$/.test(withdrawTo.trim())) {
@@ -157,7 +212,7 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
     setWithdrawMsg("");
     try {
       const { privateKey } = await ensurePatientWallet(api, userId, userEmail);
-      const res = await fetch("/api/patient/withdraw-usdc", {
+      const res = await fetch(apiPath("/patient/withdraw-usdc"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -177,7 +232,7 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
       setWithdrawTo("");
       setWithdrawAmount("");
       setWithdrawOpen(false);
-      await loadAutoWallet();
+      if (autoAddress) await loadBalance(autoAddress as `0x${string}`);
     } catch (e) {
       setWithdrawStatus("error");
       setWithdrawMsg(e instanceof Error ? e.message : "Withdrawal failed.");
@@ -214,43 +269,117 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
     }
   }
 
+  const showFaucet =
+    builtInStatus === "error" ||
+    builtInStatus === "generating" ||
+    builtInStatus === "loading" ||
+    !autoAddress ||
+    autoBalance === "0.00";
+
+  const builtInStatusMessage =
+    builtInStatus === "generating"
+      ? "Generating wallet…"
+      : builtInStatus === "loading"
+        ? "Loading wallet…"
+        : null;
+
   return (
     <div className="wallet-panel">
-      {autoLoading ? (
-        <p className="wallet-muted">Loading wallet…</p>
-      ) : autoAddress ? (
-        <div className="wallet-balance-card">
-          <span className="wallet-label">Auto wallet · Arc Testnet</span>
-          <span className="wallet-amount">{autoBalance ?? "—"} USDC</span>
-          <span className="wallet-address">{truncateAddress(autoAddress)}</span>
-        </div>
-      ) : (
-        <p className="wallet-muted">No wallet found.</p>
-      )}
+      <section className="wallet-section wallet-built-in" aria-labelledby="built-in-wallet-title">
+        <h3 id="built-in-wallet-title" className="wallet-section-title">
+          In-built wallet
+        </h3>
+        <p className="wallet-muted">Arc Testnet · USDC for pharmacy checkout</p>
 
-      {autoAddress ? (
+        {walletError ? (
+          <div className="wallet-error-banner" role="alert">
+            {walletError}
+          </div>
+        ) : null}
+
+        <div className="wallet-balance-card">
+          <span className="wallet-label">In-built wallet · Arc Testnet</span>
+
+          {builtInStatusMessage ? (
+            <span className="wallet-status-text">{builtInStatusMessage}</span>
+          ) : null}
+
+          {autoAddress && builtInStatus === "ready" ? (
+            <>
+              <span className="wallet-amount" aria-live="polite">
+                {balanceLoading ? (
+                  <span className="wallet-inline-loading">Loading balance…</span>
+                ) : autoBalance !== null ? (
+                  `${autoBalance} USDC`
+                ) : (
+                  "— USDC"
+                )}
+              </span>
+              <span className="wallet-address" title={autoAddress}>
+                {truncateAddress(autoAddress)}
+              </span>
+              <span className="wallet-address-full">{autoAddress}</span>
+            </>
+          ) : builtInStatus === "error" ? (
+            <p className="wallet-muted">No wallet loaded yet.</p>
+          ) : null}
+
+          {balanceError ? (
+            <p className="wallet-error" role="alert">
+              {balanceError}
+            </p>
+          ) : null}
+        </div>
+
+        {showFaucet ? (
+          <p className="wallet-faucet">
+            <a
+              href={ARC_FAUCET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="wallet-faucet-link"
+            >
+              Claim free USDC from Faucet
+            </a>
+            <span className="wallet-muted wallet-faucet-hint">
+              {" "}
+              — select <strong>Arc Testnet</strong> on Circle&apos;s faucet, then paste your address
+              above.
+            </span>
+          </p>
+        ) : null}
+
         <div className="wallet-actions">
-          <button type="button" className="wallet-btn-outline" onClick={() => void loadAutoWallet()}>
-            Refresh balance
-          </button>
           <button
             type="button"
-            className="wallet-btn-primary"
-            onClick={() => {
-              setWithdrawOpen((o) => !o);
-              setWithdrawStatus("idle");
-              setWithdrawMsg("");
-            }}
+            className="wallet-btn-outline"
+            disabled={builtInStatus === "loading" || builtInStatus === "generating"}
+            onClick={() => void handleRefreshWallet()}
           >
-            {withdrawOpen ? "Cancel withdraw" : "Withdraw USDC"}
+            {builtInStatus === "loading" || builtInStatus === "generating"
+              ? "Refreshing…"
+              : "Refresh wallet"}
           </button>
+          {autoAddress && builtInStatus === "ready" ? (
+            <button
+              type="button"
+              className="wallet-btn-primary"
+              onClick={() => {
+                setWithdrawOpen((o) => !o);
+                setWithdrawStatus("idle");
+                setWithdrawMsg("");
+              }}
+            >
+              {withdrawOpen ? "Cancel withdraw" : "Withdraw USDC"}
+            </button>
+          ) : null}
         </div>
-      ) : null}
+      </section>
 
-      {withdrawOpen ? (
+      {withdrawOpen && autoAddress ? (
         <section className="wallet-section wallet-withdraw">
           <p className="wallet-muted">
-            Send USDC from your auto-generated wallet to any external address on Arc testnet.
+            Send USDC from your in-built wallet to any external address on Arc testnet.
           </p>
 
           {!hasSigningKey ? (
@@ -328,7 +457,9 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
             <div className="wallet-balance-card wallet-balance-card--mm">
               <span className="wallet-label">MetaMask · Arc Testnet</span>
               <span className="wallet-amount">{mmBalance ?? "—"} USDC</span>
-              <span className="wallet-address">{truncateAddress(mmAddress)}</span>
+              <span className="wallet-address" title={mmAddress}>
+                {truncateAddress(mmAddress)}
+              </span>
             </div>
             <div className="wallet-actions">
               <button
@@ -358,8 +489,8 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
               onChange={() => choosePaymentWallet("auto")}
             />
             <span>
-              <strong>Auto wallet</strong>
-              {autoBalance ? (
+              <strong>In-built wallet</strong>
+              {autoBalance && builtInStatus === "ready" ? (
                 <span className="wallet-muted"> — {autoBalance} USDC</span>
               ) : null}
             </span>
@@ -395,7 +526,7 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
             {orders.map((o) => (
               <li key={o.id} className="wallet-order-item">
                 <span>{o.drugName}</span>
-                <span className="wallet-muted">{o.totalUsdc} USDC</span>
+                <span className="wallet-muted">{formatUsdcDisplay(o.totalUsdc)} USDC</span>
               </li>
             ))}
           </ul>
