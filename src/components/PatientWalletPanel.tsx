@@ -1,171 +1,351 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
 import { fetchArcUsdcBalance, formatUsdcDisplay } from "@/lib/arc/usdc-balance";
-import { ensurePatientWallet, fetchPatientWalletAddress, truncateAddress } from "@/lib/arc/patient-wallet";
-import type { MarketplaceOrder } from "@/components/StockMarketplace";
+import {
+  ensurePatientWallet,
+  fetchPatientWalletAddress,
+  truncateAddress,
+} from "@/lib/arc/patient-wallet";
+import type { MarketplaceOrder } from "@/types/marketplace";
 
-type Props = {
-  userId: number;
-  email: string;
-  walletAddress: string | null | undefined;
+// ─── MetaMask helpers ────────────────────────────────────────────────────────
+
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      on: (event: string, handler: (...args: unknown[]) => void) => void;
+      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+  }
+}
+
+async function connectMetaMask(): Promise<string | null> {
+  if (!window.ethereum) return null;
+  const accounts = (await window.ethereum.request({
+    method: "eth_requestAccounts",
+  })) as string[];
+  return accounts[0] ?? null;
+}
+
+async function getMetaMaskUsdcBalance(address: string): Promise<string> {
+  const USDC_CONTRACT = "0x3600000000000000000000000000000000000000";
+  const RPC_URL =
+    process.env.NEXT_PUBLIC_ARC_RPC_URL || "https://rpc.testnet.arc.network";
+
+  const data = `0x70a08231000000000000000000000000${address.slice(2)}`;
+  const body = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "eth_call",
+    params: [{ to: USDC_CONTRACT, data }, "latest"],
+  });
+
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+  const json = (await res.json()) as { result?: string };
+  if (!json.result || json.result === "0x") return "0.00";
+  const raw = BigInt(json.result);
+  return (Number(raw) / 1e6).toFixed(2);
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Props {
+  token: string;
   orders: MarketplaceOrder[];
-  api: <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
-  onWalletLinked: () => void;
-};
+}
 
-export function PatientWalletPanel({ userId, email, walletAddress, orders, api, onWalletLinked }: Props) {
-  const [address, setAddress] = useState<string | null>(walletAddress || null);
-  const [balance, setBalance] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+type Tab = "balance" | "withdraw" | "metamask";
 
-  const loadBalance = useCallback(async (addr: `0x${string}`) => {
-    setBalanceLoading(true);
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export default function PatientWalletPanel({ token, orders }: Props) {
+  const [tab, setTab] = useState<Tab>("balance");
+
+  // Auto wallet
+  const [autoAddress, setAutoAddress] = useState<string | null>(null);
+  const [autoBalance, setAutoBalance] = useState<string | null>(null);
+  const [autoLoading, setAutoLoading] = useState(true);
+
+  // Withdraw
+  const [withdrawTo, setWithdrawTo] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawStatus, setWithdrawStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [withdrawMsg, setWithdrawMsg] = useState("");
+
+  // MetaMask
+  const [mmAddress, setMmAddress] = useState<string | null>(null);
+  const [mmBalance, setMmBalance] = useState<string | null>(null);
+  const [mmConnecting, setMmConnecting] = useState(false);
+  const [mmError, setMmError] = useState("");
+
+  // ── Load auto wallet ──
+  const loadAutoWallet = useCallback(async () => {
+    setAutoLoading(true);
     try {
-      const bal = await fetchArcUsdcBalance(addr);
-      setBalance(bal);
+      const addr = await fetchPatientWalletAddress(token);
+      if (addr) {
+        setAutoAddress(addr);
+        const bal = await fetchArcUsdcBalance(addr);
+        setAutoBalance(formatUsdcDisplay(bal));
+      } else {
+        await ensurePatientWallet(token);
+        const addr2 = await fetchPatientWalletAddress(token);
+        setAutoAddress(addr2);
+        if (addr2) {
+          const bal = await fetchArcUsdcBalance(addr2);
+          setAutoBalance(formatUsdcDisplay(bal));
+        }
+      }
     } catch {
-      setBalance(null);
-    } finally {
-      setBalanceLoading(false);
+      setAutoBalance("—");
     }
-  }, []);
+    setAutoLoading(false);
+  }, [token]);
 
-  const syncWallet = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    loadAutoWallet();
+  }, [loadAutoWallet]);
+
+  // ── Withdraw ──
+  async function handleWithdraw() {
+    setWithdrawStatus("pending");
+    setWithdrawMsg("");
     try {
-      const dbAddress = await fetchPatientWalletAddress(api);
+      const keyRaw = localStorage.getItem("arcPrivateKey");
+      if (!keyRaw) throw new Error("Signing key not found in this browser.");
 
-      if (dbAddress) {
-        setAddress(dbAddress);
-        await loadBalance(dbAddress);
+      const res = await fetch("/api/patient/withdraw-usdc", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          privateKey: keyRaw,
+          amountUsdc: withdrawAmount,
+          recipientAddress: withdrawTo,
+        }),
+      });
+      const data = (await res.json()) as { txHash?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Withdrawal failed.");
+
+      setWithdrawStatus("success");
+      setWithdrawMsg(`Sent! Tx: ${data.txHash?.slice(0, 18)}…`);
+      setWithdrawTo("");
+      setWithdrawAmount("");
+      // refresh balance
+      if (autoAddress) {
+        const bal = await fetchArcUsdcBalance(autoAddress);
+        setAutoBalance(formatUsdcDisplay(bal));
+      }
+    } catch (e) {
+      setWithdrawStatus("error");
+      setWithdrawMsg(e instanceof Error ? e.message : "Withdrawal failed.");
+    }
+  }
+
+  // ── MetaMask ──
+  async function handleConnectMetaMask() {
+    setMmError("");
+    setMmConnecting(true);
+    try {
+      if (!window.ethereum) {
+        setMmError("MetaMask not detected. Please install the MetaMask browser extension.");
+        setMmConnecting(false);
         return;
       }
-
-      const { address: addr, created } = await ensurePatientWallet(api, userId, email);
-      setAddress(addr);
-      await loadBalance(addr);
-      if (created) onWalletLinked();
-    } catch (err) {
-      setError((err as Error).message);
-      setBalance(null);
-    } finally {
-      setLoading(false);
+      const addr = await connectMetaMask();
+      if (!addr) throw new Error("No account returned.");
+      setMmAddress(addr);
+      const bal = await getMetaMaskUsdcBalance(addr);
+      setMmBalance(bal);
+    } catch (e) {
+      setMmError(e instanceof Error ? e.message : "Could not connect MetaMask.");
     }
-  }, [userId, email, api, onWalletLinked, loadBalance]);
+    setMmConnecting(false);
+  }
 
-  useEffect(() => {
-    void syncWallet();
-  }, [syncWallet]);
+  async function refreshMmBalance() {
+    if (!mmAddress) return;
+    const bal = await getMetaMaskUsdcBalance(mmAddress);
+    setMmBalance(bal);
+  }
 
-  useEffect(() => {
-    if (!address || loading) return;
-    void loadBalance(address as `0x${string}`);
-  }, [orders, address, loading, loadBalance]);
-
-  const usdcOrders = orders.filter((o) => o.paymentMethod === "usdc");
-
-  const copyAddress = async () => {
-    if (!address) return;
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const balanceLabel =
-    balance !== null
-      ? `${formatUsdcDisplay(balance)} USDC`
-      : balanceLoading
-        ? "Updating…"
-        : "—";
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <section className="panel wallet-panel">
-      <h2>My Arc wallet</h2>
-      <p className="panel-sub">
-        Testnet wallet linked to your account ({email}). Fund it from the{" "}
-        <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
-          Circle faucet
-        </a>{" "}
-        to pay with USDC.
-      </p>
-      {error ? (
-        <p className="flash flash--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {loading ? (
-        <p className="muted">Loading wallet…</p>
-      ) : (
-        <>
-          <dl className="wallet-stats">
-            <div>
-              <dt>Address</dt>
-              <dd>
-                <code>{address ? truncateAddress(address) : "—"}</code>
-                {address ? (
-                  <button type="button" className="btn-small" style={{ marginLeft: "0.5rem" }} onClick={() => void copyAddress()}>
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                ) : null}
-              </dd>
-            </div>
-            <div>
-              <dt>USDC balance (Arc testnet)</dt>
-              <dd>
-                <strong>{balanceLabel}</strong>
-              </dd>
-            </div>
-          </dl>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={!address || balanceLoading}
-            onClick={() => {
-              if (address) void loadBalance(address as `0x${string}`);
-            }}
-          >
-            {balanceLoading ? "Refreshing…" : "Refresh balance"}
-          </button>
-        </>
-      )}
-      <h3 style={{ marginTop: "1.5rem" }}>USDC payment history</h3>
-      {usdcOrders.length === 0 ? (
-        <p className="muted">No USDC orders yet.</p>
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Amount</th>
-                <th>Transaction</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {usdcOrders.map((o) => (
-                <tr key={o.id}>
-                  <td>
-                    {o.drugName} × {o.quantity}
-                  </td>
-                  <td>{Number(o.totalUsdc).toFixed(2)} USDC</td>
-                  <td className="muted" style={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
-                    {o.txHash || "—"}
-                  </td>
-                  <td>
-                    <span className={`status-pill status-pill--${o.status}`}>{o.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="wallet-panel">
+      {/* Tab bar */}
+      <div className="wallet-tabs">
+        <button
+          className={`wallet-tab${tab === "balance" ? " active" : ""}`}
+          onClick={() => setTab("balance")}
+        >
+          My wallet
+        </button>
+        <button
+          className={`wallet-tab${tab === "withdraw" ? " active" : ""}`}
+          onClick={() => setTab("withdraw")}
+        >
+          Withdraw
+        </button>
+        <button
+          className={`wallet-tab${tab === "metamask" ? " active" : ""}`}
+          onClick={() => setTab("metamask")}
+        >
+          MetaMask
+        </button>
+      </div>
+
+      {/* ── Balance tab ── */}
+      {tab === "balance" && (
+        <div className="wallet-section">
+          {autoLoading ? (
+            <p className="wallet-muted">Loading wallet…</p>
+          ) : autoAddress ? (
+            <>
+              <div className="wallet-balance-card">
+                <span className="wallet-label">USDC balance (Arc Testnet)</span>
+                <span className="wallet-amount">{autoBalance ?? "—"} USDC</span>
+                <span className="wallet-address">{truncateAddress(autoAddress)}</span>
+              </div>
+              <button
+                className="wallet-btn-outline"
+                onClick={loadAutoWallet}
+                style={{ marginTop: "0.75rem" }}
+              >
+                Refresh
+              </button>
+            </>
+          ) : (
+            <p className="wallet-muted">No wallet found.</p>
+          )}
+
+          {orders.length > 0 && (
+            <>
+              <h3 className="wallet-section-title" style={{ marginTop: "1.5rem" }}>
+                Order history
+              </h3>
+              <ul className="wallet-order-list">
+                {orders.map((o) => (
+                  <li key={o.id} className="wallet-order-item">
+                    <span>{o.medicationName}</span>
+                    <span className="wallet-muted">{o.amountUsdc} USDC</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
-    </section>
+
+      {/* ── Withdraw tab ── */}
+      {tab === "withdraw" && (
+        <div className="wallet-section">
+          <p className="wallet-muted" style={{ marginBottom: "1rem" }}>
+            Send USDC from your auto-generated wallet to any external address.
+          </p>
+
+          {!localStorage.getItem("arcPrivateKey") && (
+            <div className="wallet-warning">
+              ⚠ Signing key not found in this browser. You can only withdraw from the
+              browser where you first created your wallet.
+            </div>
+          )}
+
+          <label className="wallet-field-label">Recipient address</label>
+          <input
+            className="wallet-input"
+            type="text"
+            placeholder="0x…"
+            value={withdrawTo}
+            onChange={(e) => setWithdrawTo(e.target.value)}
+          />
+
+          <label className="wallet-field-label" style={{ marginTop: "0.75rem" }}>
+            Amount (USDC)
+          </label>
+          <input
+            className="wallet-input"
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="0.00"
+            value={withdrawAmount}
+            onChange={(e) => setWithdrawAmount(e.target.value)}
+          />
+
+          <button
+            className="wallet-btn-primary"
+            style={{ marginTop: "1rem" }}
+            disabled={withdrawStatus === "pending" || !withdrawTo || !withdrawAmount}
+            onClick={handleWithdraw}
+          >
+            {withdrawStatus === "pending" ? "Sending…" : "Send USDC"}
+          </button>
+
+          {withdrawMsg && (
+            <p
+              className={withdrawStatus === "success" ? "wallet-success" : "wallet-error"}
+              style={{ marginTop: "0.75rem" }}
+            >
+              {withdrawMsg}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── MetaMask tab ── */}
+      {tab === "metamask" && (
+        <div className="wallet-section">
+          {!mmAddress ? (
+            <>
+              <p className="wallet-muted" style={{ marginBottom: "1rem" }}>
+                Connect your MetaMask wallet to pay for orders from any browser or device.
+              </p>
+              <button
+                className="wallet-btn-metamask"
+                onClick={handleConnectMetaMask}
+                disabled={mmConnecting}
+              >
+                {mmConnecting ? "Connecting…" : "🦊 Connect MetaMask"}
+              </button>
+              {mmError && <p className="wallet-error" style={{ marginTop: "0.75rem" }}>{mmError}</p>}
+            </>
+          ) : (
+            <>
+              <div className="wallet-balance-card">
+                <span className="wallet-label">MetaMask wallet</span>
+                <span className="wallet-amount">{mmBalance ?? "—"} USDC</span>
+                <span className="wallet-address">{truncateAddress(mmAddress)}</span>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                <button className="wallet-btn-outline" onClick={refreshMmBalance}>
+                  Refresh balance
+                </button>
+                <button
+                  className="wallet-btn-outline"
+                  onClick={() => {
+                    setMmAddress(null);
+                    setMmBalance(null);
+                  }}
+                >
+                  Disconnect
+                </button>
+              </div>
+              <p className="wallet-muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+                MetaMask is connected. When you check out, you'll be prompted to sign
+                the transaction in MetaMask.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
