@@ -6,7 +6,7 @@ import {
   fetchPatientWalletAddress,
   truncateAddress,
 } from "@/lib/arc/patient-wallet";
-import type { MarketplaceOrder } from "@/types/marketplace";
+import type { MarketplaceOrder } from "@/components/StockMarketplace";
 
 // ─── MetaMask helpers ────────────────────────────────────────────────────────
 
@@ -63,7 +63,11 @@ type Tab = "balance" | "withdraw" | "metamask";
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function PatientWalletPanel({ token, orders }: Props) {
+export function PatientWalletPanel(props: Props) {
+  return <PatientWalletPanelInner {...props} />;
+}
+
+function PatientWalletPanelInner({ token, orders }: Props) {
   const [tab, setTab] = useState<Tab>("balance");
 
   // Auto wallet
