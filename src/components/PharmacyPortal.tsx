@@ -647,19 +647,8 @@ export function PharmacyPortal() {
         ) : null}
         {patientTab === "wallet" ? (
           <PatientWalletPanel
-            userId={currentUser.id}
-            email={currentUser.email}
-            walletAddress={currentUser.walletAddress}
+            token={getToken() || ""}
             orders={(patientOrders as MarketplaceOrder[] | null) || []}
-            api={api}
-            onWalletLinked={async () => {
-              try {
-                const data = await api<{ user: PortalUser }>("/me");
-                setCurrentUser(data.user);
-              } catch {
-                /* ignore */
-              }
-            }}
           />
         ) : null}
         {patientTab === "meds" && patientPrescriptions.length === 0 ? (

@@ -87,18 +87,33 @@ function PatientWalletPanelInner({ token, orders }: Props) {
   const [mmConnecting, setMmConnecting] = useState(false);
   const [mmError, setMmError] = useState("");
 
+  // ── API helper ──
+  const api = useCallback(async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+    const res = await fetch(path, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  }, [token]);
+
   // ── Load auto wallet ──
   const loadAutoWallet = useCallback(async () => {
     setAutoLoading(true);
     try {
-      const addr = await fetchPatientWalletAddress(token);
+      const addr = await fetchPatientWalletAddress(api);
       if (addr) {
         setAutoAddress(addr);
         const bal = await fetchArcUsdcBalance(addr);
         setAutoBalance(formatUsdcDisplay(bal));
       } else {
-        await ensurePatientWallet(token);
-        const addr2 = await fetchPatientWalletAddress(token);
+        // Fetch user info to get userId and email
+        const me = await api<{ user: { id: number; email: string } }>("/api/me");
+        await ensurePatientWallet(api, me.user.id, me.user.email);
+        const addr2 = await fetchPatientWalletAddress(api);
         setAutoAddress(addr2);
         if (addr2) {
           const bal = await fetchArcUsdcBalance(addr2);
@@ -109,7 +124,7 @@ function PatientWalletPanelInner({ token, orders }: Props) {
       setAutoBalance("—");
     }
     setAutoLoading(false);
-  }, [token]);
+  }, [api]);
 
   useEffect(() => {
     loadAutoWallet();
@@ -144,7 +159,7 @@ function PatientWalletPanelInner({ token, orders }: Props) {
       setWithdrawAmount("");
       // refresh balance
       if (autoAddress) {
-        const bal = await fetchArcUsdcBalance(autoAddress);
+        const bal = await fetchArcUsdcBalance(autoAddress as `0x${string}`);
         setAutoBalance(formatUsdcDisplay(bal));
       }
     } catch (e) {
@@ -238,8 +253,8 @@ function PatientWalletPanelInner({ token, orders }: Props) {
               <ul className="wallet-order-list">
                 {orders.map((o) => (
                   <li key={o.id} className="wallet-order-item">
-                    <span>{o.medicationName}</span>
-                    <span className="wallet-muted">{o.amountUsdc} USDC</span>
+                    <span>{o.drugName}</span>
+                    <span className="wallet-muted">{o.totalUsdc} USDC</span>
                   </li>
                 ))}
               </ul>
