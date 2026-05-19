@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { assertServerAuthEnv, getUserRow, signToken } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,12 @@ export async function POST(request: Request) {
     const user = await getUserRow(id);
     if (!user) {
       return NextResponse.json({ error: "Could not create account." }, { status: 500 });
+    }
+
+    if (role === "patient") {
+      void sendWelcomeEmail(user.email, user.displayName).catch((e) => {
+        console.error("[register] welcome email failed", e);
+      });
     }
 
     const token = signToken(user);

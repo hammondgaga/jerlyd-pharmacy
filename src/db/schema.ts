@@ -14,6 +14,23 @@ export const users = pgTable(
   (t) => [uniqueIndex("users_email_unique").on(t.email)]
 );
 
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_password_reset_user").on(t.userId),
+    index("idx_password_reset_hash").on(t.tokenHash),
+  ]
+);
+
 export const prescriptions = pgTable(
   "prescriptions",
   {

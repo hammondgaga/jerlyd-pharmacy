@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { PasswordField } from "@/components/PasswordField";
 import { PharmacistRxPanel } from "@/components/PharmacistRxPanel";
 import { PatientWalletPanel } from "@/components/PatientWalletPanel";
 import { PharmacistStockForm } from "@/components/PharmacistStockForm";
@@ -108,7 +109,9 @@ type Flash = { msg: string; kind: "success" | "error" | "info" } | null;
 export function PharmacyPortal() {
   const [view, setView] = useState<View>("welcome");
   const [patientSub, setPatientSub] = useState<AuthSub>("login");
+  const [patientLoginMode, setPatientLoginMode] = useState<"signin" | "forgot" | "forgot-sent">("signin");
   const [adminSub, setAdminSub] = useState<AuthSub>("login");
+  const [adminLoginMode, setAdminLoginMode] = useState<"signin" | "forgot" | "forgot-sent">("signin");
   const [flash, setFlash] = useState<Flash>(null);
   const [currentUser, setCurrentUser] = useState<PortalUser | null>(null);
   const [patientTab, setPatientTab] = useState<PatientTab>("meds");
@@ -428,14 +431,15 @@ export function PharmacyPortal() {
             <label htmlFor="prName">Preferred name</label>
             <input id="prName" name="displayName" autoComplete="name" required maxLength={120} />
           </div>
-          <div>
-            <label htmlFor="prPw">Password</label>
-            <input id="prPw" name="password" type="password" minLength={8} autoComplete="new-password" required />
-          </div>
-          <div>
-            <label htmlFor="prPw2">Confirm password</label>
-            <input id="prPw2" name="password2" type="password" minLength={8} autoComplete="new-password" required />
-          </div>
+          <PasswordField id="prPw" name="password" label="Password" autoComplete="new-password" minLength={8} required />
+          <PasswordField
+            id="prPw2"
+            name="password2"
+            label="Confirm password"
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">
               Create account
@@ -448,6 +452,66 @@ export function PharmacyPortal() {
             </button>
           </div>
         </form>
+      </section>
+    ) : patientLoginMode === "forgot" ? (
+      <section className="panel">
+        <h2>Reset your password</h2>
+        <p className="panel-sub">Enter your account email and we will send you a secure link to choose a new password.</p>
+        {flashBanner}
+        <form
+          className="form-grid"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            try {
+              const data = await api<{ message?: string }>("/auth/forgot-password", {
+                method: "POST",
+                body: JSON.stringify({ email: String(fd.get("email") || "") }),
+              });
+              setFlash({ msg: data.message || "Check your email for a reset link.", kind: "success" });
+              setPatientLoginMode("forgot-sent");
+            } catch (err) {
+              setFlash({ msg: (err as Error).message, kind: "error" });
+            }
+          }}
+        >
+          <div>
+            <label htmlFor="fpEmail">Email</label>
+            <input id="fpEmail" name="email" type="email" autoComplete="email" required />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">
+              Send reset link
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setPatientLoginMode("signin");
+                setFlash(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          </div>
+        </form>
+      </section>
+    ) : patientLoginMode === "forgot-sent" ? (
+      <section className="panel">
+        <h2>Check your email</h2>
+        <p className="panel-sub">
+          If an account exists for that address, we sent a password reset link. It expires in one hour. Check your spam
+          folder if you do not see it.
+        </p>
+        {flashBanner}
+        <div className="form-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setPatientLoginMode("signin")}>
+            Back to sign in
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setView("welcome")}>
+            Home
+          </button>
+        </div>
       </section>
     ) : (
       <section className="panel">
@@ -484,15 +548,24 @@ export function PharmacyPortal() {
             <label htmlFor="plEmail">Email</label>
             <input id="plEmail" name="email" type="email" autoComplete="username" required />
           </div>
-          <div>
-            <label htmlFor="plPw">Password</label>
-            <input id="plPw" name="password" type="password" autoComplete="current-password" required />
-          </div>
+          <PasswordField id="plPw" name="password" label="Password" autoComplete="current-password" required />
+          <p className="auth-forgot-wrap">
+            <button type="button" className="auth-forgot-link" onClick={() => setPatientLoginMode("forgot")}>
+              Forgot password?
+            </button>
+          </p>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">
               Sign in
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setPatientSub("register")}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setPatientSub("register");
+                setPatientLoginMode("signin");
+              }}
+            >
               Create account
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setView("welcome")}>
@@ -740,14 +813,15 @@ export function PharmacyPortal() {
             <label htmlFor="arInvite">Staff invite code</label>
             <input id="arInvite" name="inviteCode" autoComplete="off" required />
           </div>
-          <div>
-            <label htmlFor="arPw">Password</label>
-            <input id="arPw" name="password" type="password" minLength={8} autoComplete="new-password" required />
-          </div>
-          <div>
-            <label htmlFor="arPw2">Confirm password</label>
-            <input id="arPw2" name="password2" type="password" minLength={8} autoComplete="new-password" required />
-          </div>
+          <PasswordField id="arPw" name="password" label="Password" autoComplete="new-password" minLength={8} required />
+          <PasswordField
+            id="arPw2"
+            name="password2"
+            label="Confirm password"
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">
               Create staff account
@@ -760,6 +834,65 @@ export function PharmacyPortal() {
             </button>
           </div>
         </form>
+      </section>
+    ) : adminLoginMode === "forgot" ? (
+      <section className="panel">
+        <h2>Reset staff password</h2>
+        <p className="panel-sub">Enter your work email and we will send a secure link to reset your password.</p>
+        {flashBanner}
+        <form
+          className="form-grid"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            try {
+              const data = await api<{ message?: string }>("/auth/forgot-password", {
+                method: "POST",
+                body: JSON.stringify({ email: String(fd.get("email") || "") }),
+              });
+              setFlash({ msg: data.message || "Check your email for a reset link.", kind: "success" });
+              setAdminLoginMode("forgot-sent");
+            } catch (err) {
+              setFlash({ msg: (err as Error).message, kind: "error" });
+            }
+          }}
+        >
+          <div>
+            <label htmlFor="afpEmail">Work email</label>
+            <input id="afpEmail" name="email" type="email" autoComplete="email" required />
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">
+              Send reset link
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setAdminLoginMode("signin");
+                setFlash(null);
+              }}
+            >
+              Back to sign in
+            </button>
+          </div>
+        </form>
+      </section>
+    ) : adminLoginMode === "forgot-sent" ? (
+      <section className="panel">
+        <h2>Check your email</h2>
+        <p className="panel-sub">
+          If an account exists for that address, we sent a password reset link. It expires in one hour.
+        </p>
+        {flashBanner}
+        <div className="form-actions">
+          <button type="button" className="btn btn-primary" onClick={() => setAdminLoginMode("signin")}>
+            Back to sign in
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setView("welcome")}>
+            Home
+          </button>
+        </div>
       </section>
     ) : (
       <section className="panel">
@@ -796,15 +929,24 @@ export function PharmacyPortal() {
             <label htmlFor="alEmail">Email</label>
             <input id="alEmail" name="email" type="email" autoComplete="username" required />
           </div>
-          <div>
-            <label htmlFor="alPw">Password</label>
-            <input id="alPw" name="password" type="password" autoComplete="current-password" required />
-          </div>
+          <PasswordField id="alPw" name="password" label="Password" autoComplete="current-password" required />
+          <p className="auth-forgot-wrap">
+            <button type="button" className="auth-forgot-link" onClick={() => setAdminLoginMode("forgot")}>
+              Forgot password?
+            </button>
+          </p>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">
               Sign in
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setAdminSub("register")}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setAdminSub("register");
+                setAdminLoginMode("signin");
+              }}
+            >
               New staff account
             </button>
             <button type="button" className="btn btn-secondary" onClick={() => setView("welcome")}>
