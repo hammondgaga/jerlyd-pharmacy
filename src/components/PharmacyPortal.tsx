@@ -648,6 +648,8 @@ export function PharmacyPortal() {
         {patientTab === "wallet" ? (
           <PatientWalletPanel
             token={getToken() || ""}
+            userId={currentUser.id}
+            userEmail={currentUser.email}
             orders={(patientOrders as MarketplaceOrder[] | null) || []}
           />
         ) : null}

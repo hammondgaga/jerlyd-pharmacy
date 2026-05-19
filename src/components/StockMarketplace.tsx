@@ -6,9 +6,21 @@ import { MedicationCard } from "@/components/MedicationCard";
 import { formatNaira, formatUsdc, nairaToUsdc } from "@/lib/exchange-rate";
 import { getCategoryMeta } from "@/lib/marketplace-categories";
 import type { StockItemDto, StockPackDto } from "@/lib/stock-catalog";
+import {
+  connectMetaMask,
+  fetchMetaMaskUsdcBalance,
+  hasMetaMask,
+  sendMetaMaskUsdc,
+} from "@/lib/arc/metamask-client";
 import { payUsdcWithArc } from "@/lib/arc/pay-usdc";
 import { fetchArcUsdcBalance, formatUsdcDisplay } from "@/lib/arc/usdc-balance";
 import { ensurePatientWallet, fetchPatientWalletAddress } from "@/lib/arc/patient-wallet";
+import {
+  getPaymentWallet,
+  getStoredMetaMaskAddress,
+  setPaymentWallet,
+  setStoredMetaMaskAddress,
+} from "@/lib/arc/payment-preference";
 
 export type MarketplaceItem = StockItemDto;
 
@@ -64,14 +76,6 @@ type Props = {
   onOrdersChanged: () => void;
 };
 
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-    };
-  }
-}
-
 function unitUsdc(pack: { priceNaira: number; priceUsdc: number }, ngnPerUsd: number): number {
   return pack.priceUsdc > 0 ? pack.priceUsdc : nairaToUsdc(pack.priceNaira, ngnPerUsd);
 }
@@ -88,33 +92,6 @@ function defaultPackId(item: MarketplaceItem): number {
 
 function getPack(item: MarketplaceItem, packId: number): StockPackDto {
   return item.packs.find((p) => p.id === packId) ?? item.packs[0];
-}
-
-const ARC_USDC_CONTRACT = "0x3600000000000000000000000000000000000000";
-const ARC_RPC_URL =
-  typeof process !== "undefined" && process.env.NEXT_PUBLIC_ARC_RPC_URL
-    ? process.env.NEXT_PUBLIC_ARC_RPC_URL
-    : "https://rpc.testnet.arc.network";
-
-async function fetchMetaMaskUsdcBalance(address: string): Promise<string> {
-  const data =
-    "0x70a08231" +
-    "000000000000000000000000" +
-    address.slice(2).padStart(40, "0");
-  const res = await fetch(ARC_RPC_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_call",
-      params: [{ to: ARC_USDC_CONTRACT, data }, "latest"],
-    }),
-  });
-  const json = (await res.json()) as { result?: string };
-  if (!json.result) return "0.00";
-  const raw = BigInt(json.result);
-  return (Number(raw) / 1_000_000).toFixed(2);
 }
 
 export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChanged }: Props) {
@@ -192,16 +169,34 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     }
   }, [api]);
 
-  // Auto-detect already-connected MetaMask on mount
   useEffect(() => {
-    if (typeof window === "undefined" || !window.ethereum) return;
-    window.ethereum
-      .request({ method: "eth_accounts" })
-      .then((accounts) => {
-        const list = accounts as string[];
-        if (list[0]) setMetaMaskAddress(list[0]);
-      })
-      .catch(() => {});
+    const stored = getStoredMetaMaskAddress();
+    if (stored) setMetaMaskAddress(stored);
+    const pref = getPaymentWallet();
+    if (pref === "metamask" && stored) setPayment("metamask");
+  }, []);
+
+  useEffect(() => {
+    const onPref = () => {
+      const pref = getPaymentWallet();
+      if (pref === "metamask" && getStoredMetaMaskAddress()) {
+        setPayment("metamask");
+      } else if (pref === "auto") {
+        setPayment((p) => (p === "metamask" ? "usdc" : p));
+      }
+    };
+    const onMm = () => {
+      const stored = getStoredMetaMaskAddress();
+      setMetaMaskAddress(stored);
+      if (stored) void fetchMetaMaskUsdcBalance(stored).then(setMetaMaskBalance).catch(() => {});
+      else setMetaMaskBalance(null);
+    };
+    window.addEventListener("jerlyd-payment-wallet", onPref);
+    window.addEventListener("jerlyd-metamask-address", onMm);
+    return () => {
+      window.removeEventListener("jerlyd-payment-wallet", onPref);
+      window.removeEventListener("jerlyd-metamask-address", onMm);
+    };
   }, []);
 
   // Fetch MetaMask USDC balance when cart opens and MetaMask is connected
@@ -320,16 +315,17 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     setCart((prev) => prev.filter((l) => !(l.stockItemId === stockItemId && l.packId === packId)));
   };
 
-  const connectMetaMask = async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
+  const connectMetaMaskWallet = async () => {
+    if (!hasMetaMask()) {
       onFlash("MetaMask not found. Please install the MetaMask browser extension.", "error");
       return;
     }
     try {
-      const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const addr = accounts[0];
+      const addr = await connectMetaMask();
       setMetaMaskAddress(addr);
+      setStoredMetaMaskAddress(addr);
       setPayment("metamask");
+      setPaymentWallet("metamask");
       const bal = await fetchMetaMaskUsdcBalance(addr);
       setMetaMaskBalance(bal);
     } catch {
@@ -348,17 +344,9 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
       let txHash = "";
 
       if (payment === "metamask") {
-        if (!metaMaskAddress || !window.ethereum) {
-          throw new Error("MetaMask is not connected.");
+        if (!metaMaskAddress) {
+          throw new Error("MetaMask is not connected. Connect it under My wallet or below.");
         }
-        const microUsdc = BigInt(Math.round(cartTotalsRounded.usdc * 1_000_000));
-        const amountHex = microUsdc.toString(16).padStart(64, "0");
-        // transfer(address recipient, uint256 amount)
-        const data =
-          "0xa9059cbb" +
-          "000000000000000000000000" +
-          metaMaskAddress.slice(2).padStart(40, "0") +
-          amountHex;
         if (
           !confirm(
             `Pay ${cartTotalsRounded.usdc.toFixed(2)} USDC via MetaMask for ${cart.length} medication(s)?`
@@ -367,11 +355,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
           setPaying(false);
           return;
         }
-        const rawHash = await window.ethereum.request({
-          method: "eth_sendTransaction",
-          params: [{ from: metaMaskAddress, to: ARC_USDC_CONTRACT, data, gas: "0x15F90" }],
-        });
-        txHash = rawHash as string;
+        txHash = await sendMetaMaskUsdc(metaMaskAddress, cartTotalsRounded.usdc);
       } else if (payment === "usdc") {
         const { privateKey, address } = await ensurePatientWallet(api, userId, userEmail);
         const bal = Number(await fetchArcUsdcBalance(address));
@@ -663,7 +647,10 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                         type="radio"
                         name="cart-pay"
                         checked={payment === "usdc"}
-                        onChange={() => setPayment("usdc")}
+                        onChange={() => {
+                          setPayment("usdc");
+                          setPaymentWallet("auto");
+                        }}
                       />
                       Pay with USDC (auto wallet)
                       {walletBalance !== null ? (
@@ -675,9 +662,13 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                         type="radio"
                         name="cart-pay"
                         checked={payment === "metamask"}
-                        onChange={() => void connectMetaMask()}
+                        disabled={!metaMaskAddress}
+                        onChange={() => {
+                          setPayment("metamask");
+                          setPaymentWallet("metamask");
+                        }}
                       />
-                      Pay with MetaMask
+                      Pay with USDC (MetaMask)
                       {metaMaskAddress ? (
                         <span className="muted">
                           {" "}
@@ -685,9 +676,18 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                           {metaMaskBalance !== null ? ` · ${metaMaskBalance} USDC` : ""}
                         </span>
                       ) : (
-                        <span className="muted"> — click to connect</span>
+                        <span className="muted"> — connect MetaMask first</span>
                       )}
                     </label>
+                    {!metaMaskAddress ? (
+                      <button
+                        type="button"
+                        className="wallet-btn-metamask cart-metamask-connect"
+                        onClick={() => void connectMetaMaskWallet()}
+                      >
+                        Connect MetaMask
+                      </button>
+                    ) : null}
                   </fieldset>
 
                   <button

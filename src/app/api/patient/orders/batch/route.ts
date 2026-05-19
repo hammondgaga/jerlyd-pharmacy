@@ -7,7 +7,7 @@ import { verifyBearer } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
-const PAYMENT_METHODS = ["pending", "card_naira", "usdc"] as const;
+const PAYMENT_METHODS = ["pending", "card_naira", "usdc", "metamask"] as const;
 
 type CartLineInput = { stockItemId?: number; packId?: number; quantity?: number };
 
@@ -57,7 +57,10 @@ export async function POST(request: Request) {
     if (!PAYMENT_METHODS.includes(paymentMethod as (typeof PAYMENT_METHODS)[number])) {
       return NextResponse.json({ error: "Invalid payment method." }, { status: 400 });
     }
-    if (paymentMethod === "usdc" && (!txHash.startsWith("0x") || txHash.length < 10)) {
+    if (
+      (paymentMethod === "usdc" || paymentMethod === "metamask") &&
+      (!txHash.startsWith("0x") || txHash.length < 10)
+    ) {
       return NextResponse.json({ error: "USDC payment requires a valid transaction hash." }, { status: 400 });
     }
 
@@ -106,7 +109,8 @@ export async function POST(request: Request) {
       }
 
       const t = new Date().toISOString();
-      const status = paymentMethod === "usdc" ? "confirmed" : "pending";
+      const status =
+        paymentMethod === "usdc" || paymentMethod === "metamask" ? "confirmed" : "pending";
       const orders = [];
 
       for (const line of prepared) {
