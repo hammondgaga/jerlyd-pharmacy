@@ -1407,6 +1407,120 @@ th {
   margin-top: 1.25rem;
 }
 
+.payment-option--cctp {
+  margin-top: 0.35rem;
+}
+
+.cctp-checkout-options {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid #d4e8f7;
+  background: linear-gradient(160deg, #f4f9fc 0%, #fff 70%);
+}
+
+.cctp-checkout-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.cctp-token-picker {
+  display: flex;
+  gap: 1rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: none;
+}
+
+.cctp-token-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cctp-progress {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.cctp-progress-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.cctp-progress-sub {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+}
+
+.cctp-progress-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cctp-progress-step {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.9rem;
+}
+
+.cctp-progress-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 2px solid var(--line);
+  color: var(--muted);
+  background: #fff;
+}
+
+.cctp-progress-step--done .cctp-progress-marker {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.cctp-progress-step--active .cctp-progress-marker {
+  border-color: var(--brand);
+  color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.15);
+}
+
+.cctp-progress-step--active .cctp-progress-step-label {
+  font-weight: 700;
+  color: var(--brand);
+}
+
+.cctp-progress-detail {
+  margin: 0.85rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.cctp-progress-error {
+  margin-top: 0.65rem;
+}
+
 /* —— Category marketplace —— */
 .marketplace-intro {
   margin: 0 0 1rem;

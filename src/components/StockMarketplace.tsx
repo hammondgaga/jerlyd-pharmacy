@@ -21,6 +21,12 @@ import {
   setPaymentWallet,
   setStoredMetaMaskAddress,
 } from "@/lib/arc/payment-preference";
+import {
+  executeCrossChainCheckout,
+  type CctpBridgeToken,
+  type CrossChainProgress,
+} from "@/lib/arc/cctp-bridge-client";
+import { CrossChainPaymentProgress } from "@/components/CrossChainPaymentProgress";
 
 export type MarketplaceItem = StockItemDto;
 
@@ -61,8 +67,9 @@ type CartLine = {
 };
 
 type OrderConfirmation = {
-  paymentMethod: "card_naira" | "usdc" | "metamask";
+  paymentMethod: "card_naira" | "usdc" | "metamask" | "cctp";
   txHash?: string;
+  cctpToken?: CctpBridgeToken;
   lines: { drugName: string; packLabel: string; quantity: number; totalNaira: number; totalUsdc: number }[];
   totalNaira: number;
   totalUsdc: number;
@@ -107,8 +114,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
   const [addQty, setAddQty] = useState<Record<number, number>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [note, setNote] = useState("");
-  const [payment, setPayment] = useState<"card_naira" | "usdc" | "metamask">("card_naira");
+  const [payment, setPayment] = useState<"card_naira" | "usdc" | "metamask" | "cctp">("card_naira");
   const [paying, setPaying] = useState(false);
+  const [cctpToken, setCctpToken] = useState<CctpBridgeToken>("USDC");
+  const [cctpProgress, setCctpProgress] = useState<CrossChainProgress | null>(null);
+  const [cctpError, setCctpError] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<OrderConfirmation | null>(null);
   const [metaMaskAddress, setMetaMaskAddress] = useState<string | null>(null);
@@ -377,6 +387,24 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         }
         const pay = await payUsdcWithArc(api, privateKey, cartTotalsRounded.usdc.toFixed(6), "");
         txHash = pay.txHash;
+      } else if (payment === "cctp") {
+        if (!metaMaskAddress && !hasMetaMask()) {
+          throw new Error("Connect MetaMask on Ethereum Sepolia to pay from another chain.");
+        }
+        setCctpError(null);
+        setCctpProgress({
+          step: "initiated",
+          detail: "Starting cross-chain checkout…",
+        });
+        const result = await executeCrossChainCheckout({
+          api,
+          userId,
+          userEmail,
+          amountUsdc: cartTotalsRounded.usdc,
+          token: cctpToken,
+          onProgress: setCctpProgress,
+        });
+        txHash = result.paymentTxHash;
       }
 
       await api("/patient/orders/batch", {
@@ -389,7 +417,8 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
           })),
           patientNote: note,
           paymentMethod: payment,
-          txHash: payment === "usdc" || payment === "metamask" ? txHash : undefined,
+          txHash:
+            payment === "usdc" || payment === "metamask" || payment === "cctp" ? txHash : undefined,
         }),
       });
 
@@ -406,7 +435,9 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
 
       setConfirmation({
         paymentMethod: payment,
-        txHash: payment === "usdc" || payment === "metamask" ? txHash : undefined,
+        txHash:
+          payment === "usdc" || payment === "metamask" || payment === "cctp" ? txHash : undefined,
+        cctpToken: payment === "cctp" ? cctpToken : undefined,
         lines: confirmLines,
         totalNaira: cartTotalsRounded.naira,
         totalUsdc: cartTotalsRounded.usdc,
@@ -415,6 +446,8 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
       setCart([]);
       setCartOpen(false);
       setNote("");
+      setCctpProgress(null);
+      setCctpError(null);
       await load();
       onOrdersChanged();
       if (payment === "usdc") await refreshBalance();
@@ -422,7 +455,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
         fetchMetaMaskUsdcBalance(metaMaskAddress).then(setMetaMaskBalance).catch(() => {});
       }
     } catch (err) {
-      onFlash((err as Error).message, "error");
+      const message = (err as Error).message;
+      if (payment === "cctp") {
+        setCctpError(message);
+      }
+      onFlash(message, "error");
     } finally {
       setPaying(false);
     }
@@ -688,6 +725,69 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                         Connect MetaMask
                       </button>
                     ) : null}
+                    <label className="payment-option payment-option--cctp">
+                      <input
+                        type="radio"
+                        name="cart-pay"
+                        checked={payment === "cctp"}
+                        onChange={() => {
+                          setPayment("cctp");
+                          setCctpError(null);
+                        }}
+                      />
+                      <span>
+                        <strong>Pay from another chain</strong>
+                        <span className="muted">
+                          {" "}
+                          — Bridge {formatUsdc(cartTotalsRounded.usdc)} via CCTP (Sepolia → Arc)
+                        </span>
+                      </span>
+                    </label>
+                    {payment === "cctp" ? (
+                      <div className="cctp-checkout-options">
+                        <p className="wallet-muted cctp-checkout-hint">
+                          Uses Circle Bridge Kit (CCTP). MetaMask on{" "}
+                          <strong>Ethereum Sepolia</strong> must hold enough{" "}
+                          {cctpToken} plus gas. Funds mint to your in-built Arc wallet, then USDC
+                          is sent to the pharmacy.
+                        </p>
+                        <fieldset className="cctp-token-picker">
+                          <legend className="sr-only">Bridge token</legend>
+                          <label className="cctp-token-option">
+                            <input
+                              type="radio"
+                              name="cctp-token"
+                              checked={cctpToken === "USDC"}
+                              onChange={() => setCctpToken("USDC")}
+                              disabled={paying}
+                            />
+                            USDC
+                          </label>
+                          <label className="cctp-token-option">
+                            <input
+                              type="radio"
+                              name="cctp-token"
+                              checked={cctpToken === "EURC"}
+                              onChange={() => setCctpToken("EURC")}
+                              disabled={paying}
+                            />
+                            EURC
+                          </label>
+                        </fieldset>
+                        {!metaMaskAddress ? (
+                          <button
+                            type="button"
+                            className="wallet-btn-metamask cart-metamask-connect"
+                            onClick={() => void connectMetaMaskWallet()}
+                          >
+                            Connect MetaMask (Sepolia)
+                          </button>
+                        ) : null}
+                        {(paying || cctpProgress) && (
+                          <CrossChainPaymentProgress progress={cctpProgress} error={cctpError} />
+                        )}
+                      </div>
+                    ) : null}
                   </fieldset>
 
                   <button
@@ -697,7 +797,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                     disabled={paying}
                     onClick={() => void checkoutCart()}
                   >
-                    {paying ? "Processing…" : "Checkout"}
+                    {paying
+                      ? payment === "cctp"
+                        ? "Bridging & paying…"
+                        : "Processing…"
+                      : "Checkout"}
                   </button>
                 </div>
               </>
@@ -711,9 +815,11 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
           <div className="checkout-panel panel order-confirmation">
             <h3 id="confirm-title">Order confirmed</h3>
             <p className="panel-sub">
-              {confirmation.paymentMethod === "usdc" || confirmation.paymentMethod === "metamask"
-                ? `Your USDC payment was received${confirmation.paymentMethod === "metamask" ? " via MetaMask" : ""} and your order is confirmed.`
-                : "Your order was placed. Pay with your card (Naira) at the pharmacy."}
+              {confirmation.paymentMethod === "cctp"
+                ? `Your cross-chain CCTP payment (${confirmation.cctpToken ?? "USDC"}) was bridged from Ethereum Sepolia to Arc and your order is confirmed.`
+                : confirmation.paymentMethod === "usdc" || confirmation.paymentMethod === "metamask"
+                  ? `Your USDC payment was received${confirmation.paymentMethod === "metamask" ? " via MetaMask" : ""} and your order is confirmed.`
+                  : "Your order was placed. Pay with your card (Naira) at the pharmacy."}
             </p>
             <ul className="confirm-lines">
               {confirmation.lines.map((line) => (
@@ -770,8 +876,10 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                     {o.paymentMethod === "usdc"
                       ? "USDC (auto)"
                       : o.paymentMethod === "metamask"
-                      ? "MetaMask"
-                      : "Card (₦)"}
+                        ? "MetaMask"
+                        : o.paymentMethod === "cctp"
+                          ? "CCTP (cross-chain)"
+                          : "Card (₦)"}
                     {o.txHash ? (
                       <div className="muted" style={{ fontSize: "0.75rem", wordBreak: "break-all" }}>
                         {o.txHash.slice(0, 18)}…
