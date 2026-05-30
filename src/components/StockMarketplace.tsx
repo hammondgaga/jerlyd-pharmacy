@@ -692,35 +692,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                         <div className="cart-line-qty">
                           <button
                             type="button"
-                            className="cart-qty-btn cart-qty-btn--minus"
-                            onClick={() => decrementQty(line.stockItemId, line.packId)}
-                            aria-label="Decrease quantity"
-                          >
-                            −
-                          </button>
-                          <input
-                            id={`cart-qty-${line.stockItemId}-${line.packId}`}
-                            type="number"
-                            min={1}
-                            max={line.maxQty}
-                            value={line.quantity}
-                            onChange={(e) =>
-                              updateCartQty(line.stockItemId, line.packId, Number(e.target.value))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="cart-qty-btn cart-qty-btn--plus"
-                            onClick={() => incrementQty(line.stockItemId, line.packId)}
-                            disabled={line.quantity >= line.maxQty}
-                            aria-label="Increase quantity"
-                          >
-                            +
-                          </button>
-                          <span className="muted cart-max-stock">max {line.maxQty}</span>
-                          <button
-                            type="button"
-                            className="qty-stepper-btn"
+                            className="qty-stepper-btn qty-stepper-btn--minus"
                             aria-label="Decrease quantity"
                             onClick={() => {
                               if (line.quantity === 1) {
@@ -735,7 +707,7 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                           <span className="qty-display">{line.quantity}</span>
                           <button
                             type="button"
-                            className="qty-stepper-btn"
+                            className="qty-stepper-btn qty-stepper-btn--plus"
                             aria-label="Increase quantity"
                             disabled={line.quantity >= line.maxQty}
                             onClick={() => {
