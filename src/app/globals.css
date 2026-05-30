@@ -809,10 +809,50 @@ th {
 .cart-drawer-header h3 {
   margin: 0;
   font-family: var(--font-heading), Georgia, serif;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cart-item-count {
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--bg-alt);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
 }
 
 .cart-empty {
   padding: 1.5rem 1.25rem;
+}
+
+.cart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+}
+
+.cart-empty-icon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 1.25rem;
+  color: var(--muted);
+}
+
+.cart-empty-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cart-empty-text {
+  margin: 0 0 1.25rem;
+  font-size: 1.05rem;
+  color: var(--muted);
 }
 
 .cart-lines {
@@ -852,12 +892,65 @@ th {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-bottom: 0.35rem;
 }
 
+.cart-line-qty label {
+  display: none;
+}
+
+.cart-qty-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cart-qty-btn:hover:not(:disabled) {
+  background: var(--bg-alt);
+  border-color: var(--accent);
+}
+
+.cart-qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cart-qty-btn--minus {
+  color: var(--danger);
+}
+
+.cart-qty-btn--plus {
+  color: var(--accent);
+}
+
 .cart-line-qty input {
-  width: 4.5rem;
+  width: 3.5rem;
+  text-align: center;
+  font-weight: 600;
+  -moz-appearance: textfield;
+}
+
+.cart-line-qty input::-webkit-outer-spin-button,
+.cart-line-qty input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cart-max-stock {
+  font-size: 0.78rem;
+  margin-left: 0.25rem;
 }
 
 .cart-line-total {
@@ -872,8 +965,18 @@ th {
   background: #fafcfb;
 }
 
+.cart-summary {
+  margin-top: 0.75rem;
+}
+
+.cart-summary-count {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .cart-grand-total {
-  margin: 0.75rem 0 1rem;
+  margin: 0 0 1rem;
   font-size: 1.05rem;
   line-height: 1.5;
 }
