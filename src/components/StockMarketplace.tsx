@@ -637,18 +637,33 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                           {formatUsdc(unitUsdc(line, ngnPerUsd))} / {line.unit}
                         </p>
                         <div className="cart-line-qty">
-                          <label htmlFor={`cart-qty-${line.stockItemId}-${line.packId}`}>Qty</label>
-                          <input
-                            id={`cart-qty-${line.stockItemId}-${line.packId}`}
-                            type="number"
-                            min={1}
-                            max={line.maxQty}
-                            value={line.quantity}
-                            onChange={(e) =>
-                              updateCartQty(line.stockItemId, line.packId, Number(e.target.value))
-                            }
-                          />
-                          <span className="muted">max {line.maxQty}</span>
+                          <button
+                            type="button"
+                            className="qty-stepper-btn"
+                            aria-label="Decrease quantity"
+                            onClick={() => {
+                              if (line.quantity === 1) {
+                                removeFromCart(line.stockItemId, line.packId);
+                              } else {
+                                updateCartQty(line.stockItemId, line.packId, line.quantity - 1);
+                              }
+                            }}
+                          >
+                            −
+                          </button>
+                          <span className="qty-display">{line.quantity}</span>
+                          <button
+                            type="button"
+                            className="qty-stepper-btn"
+                            aria-label="Increase quantity"
+                            disabled={line.quantity >= line.maxQty}
+                            onClick={() => {
+                              updateCartQty(line.stockItemId, line.packId, Math.min(line.quantity + 1, line.maxQty));
+                            }}
+                          >
+                            +
+                          </button>
+                          <span className="muted qty-max-label">max {line.maxQty}</span>
                         </div>
                         <p className="cart-line-total">
                           {formatNaira(t.naira)} · {formatUsdc(t.usdc)}
