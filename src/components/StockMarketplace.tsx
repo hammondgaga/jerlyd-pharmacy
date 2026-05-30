@@ -325,6 +325,37 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
     setCart((prev) => prev.filter((l) => !(l.stockItemId === stockItemId && l.packId === packId)));
   };
 
+  const incrementQty = (stockItemId: number, packId: number) => {
+    setCart((prev) =>
+      prev.map((l) => {
+        if (l.stockItemId === stockItemId && l.packId === packId) {
+          const newQty = l.quantity + 1;
+          if (newQty > l.maxQty) {
+            onFlash(`Max stock reached (${l.maxQty} ${l.unit} available)`, "error");
+            return l;
+          }
+          return { ...l, quantity: newQty };
+        }
+        return l;
+      })
+    );
+  };
+
+  const decrementQty = (stockItemId: number, packId: number) => {
+    setCart((prev) => {
+      const line = prev.find((l) => l.stockItemId === stockItemId && l.packId === packId);
+      if (!line) return prev;
+      if (line.quantity <= 1) {
+        return prev.filter((l) => !(l.stockItemId === stockItemId && l.packId === packId));
+      }
+      return prev.map((l) =>
+        l.stockItemId === stockItemId && l.packId === packId
+          ? { ...l, quantity: l.quantity - 1 }
+          : l
+      );
+    });
+  };
+
   const connectMetaMaskWallet = async () => {
     if (!hasMetaMask()) {
       onFlash("MetaMask not found. Please install the MetaMask browser extension.", "error");
@@ -607,14 +638,36 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
             onClick={(e) => e.stopPropagation()}
           >
             <header className="cart-drawer-header">
-              <h3 id="cart-title">Your cart</h3>
+              <h3 id="cart-title">
+                Your cart
+                <span className="cart-item-count">
+                  {cartCount} {cartCount === 1 ? "item" : "items"}
+                </span>
+              </h3>
               <button type="button" className="btn-small cart-close" onClick={() => setCartOpen(false)}>
                 Close
               </button>
             </header>
 
             {cart.length === 0 ? (
-              <p className="muted cart-empty">Your cart is empty.</p>
+              <div className="cart-empty-state">
+                <div className="cart-empty-icon" aria-hidden>
+                  <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2" />
+                    <rect x="20" y="24" width="24" height="16" rx="8" stroke="currentColor" strokeWidth="2" strokeOpacity="0.4" />
+                    <circle cx="44" cy="40" r="2" fill="currentColor" fillOpacity="0.3" />
+                    <path d="M32 28v8M28 32h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeOpacity="0.4" />
+                  </svg>
+                </div>
+                <p className="cart-empty-text">Your cart is empty</p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setCartOpen(false)}
+                >
+                  Browse medications
+                </button>
+              </div>
             ) : (
               <>
                 <ul className="cart-lines">
@@ -637,7 +690,14 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                           {formatUsdc(unitUsdc(line, ngnPerUsd))} / {line.unit}
                         </p>
                         <div className="cart-line-qty">
-                          <label htmlFor={`cart-qty-${line.stockItemId}-${line.packId}`}>Qty</label>
+                          <button
+                            type="button"
+                            className="cart-qty-btn cart-qty-btn--minus"
+                            onClick={() => decrementQty(line.stockItemId, line.packId)}
+                            aria-label="Decrease quantity"
+                          >
+                            −
+                          </button>
                           <input
                             id={`cart-qty-${line.stockItemId}-${line.packId}`}
                             type="number"
@@ -648,7 +708,16 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                               updateCartQty(line.stockItemId, line.packId, Number(e.target.value))
                             }
                           />
-                          <span className="muted">max {line.maxQty}</span>
+                          <button
+                            type="button"
+                            className="cart-qty-btn cart-qty-btn--plus"
+                            onClick={() => incrementQty(line.stockItemId, line.packId)}
+                            disabled={line.quantity >= line.maxQty}
+                            aria-label="Increase quantity"
+                          >
+                            +
+                          </button>
+                          <span className="muted cart-max-stock">max {line.maxQty}</span>
                         </div>
                         <p className="cart-line-total">
                           {formatNaira(t.naira)} · {formatUsdc(t.usdc)}
@@ -662,11 +731,16 @@ export function StockMarketplace({ userId, userEmail, api, onFlash, onOrdersChan
                   <label htmlFor="cart-note">Note for pharmacist (optional)</label>
                   <input id="cart-note" value={note} onChange={(e) => setNote(e.target.value)} />
 
-                  <p className="cart-grand-total">
-                    Total: <strong>{formatNaira(cartTotalsRounded.naira)}</strong>
-                    <br />
-                    <strong>{formatUsdc(cartTotalsRounded.usdc)}</strong>
-                  </p>
+                  <div className="cart-summary">
+                    <p className="cart-summary-count">
+                      {cartCount} {cartCount === 1 ? "item" : "items"} in your cart
+                    </p>
+                    <p className="cart-grand-total">
+                      Total: <strong>{formatNaira(cartTotalsRounded.naira)}</strong>
+                      <br />
+                      <strong>{formatUsdc(cartTotalsRounded.usdc)}</strong>
+                    </p>
+                  </div>
 
                   <fieldset className="payment-methods">
                     <legend className="sr-only">Payment method</legend>
