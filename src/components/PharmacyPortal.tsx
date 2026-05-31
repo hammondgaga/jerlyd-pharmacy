@@ -1434,9 +1434,9 @@ export function PharmacyPortal() {
           <div className="brand-logo-wrapper">
             <picture>
               <img 
-                src="/logo.jpg" 
-                alt="Jerlyd Pharmacy logo" 
-                style={{ height: "48px", width: "auto", maxWidth: "160px", objectFit: "contain" }}
+                src="/logo.jpeg" 
+                alt="Jerlyd Pharmacy" 
+                style={{ height: "48px", width: "auto" }}
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = "none";
                   const svg = (e.currentTarget as HTMLImageElement).nextElementSibling as SVGSVGElement | null;
