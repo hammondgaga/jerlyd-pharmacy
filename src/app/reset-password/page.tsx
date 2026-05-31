@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
@@ -100,14 +99,23 @@ export default function ResetPasswordPage() {
       <header className="site-header">
         <div className="brand">
           <div className="brand-logo-wrapper">
-            <Image 
-              src="/logo.jpg" 
-              alt="Jerlyd Pharmacy logo" 
-              height={48}
-              width={160}
-              style={{ objectFit: "contain" }}
-              priority
-            />
+            <picture>
+              <img 
+                src="/logo.jpg" 
+                alt="Jerlyd Pharmacy logo" 
+                style={{ height: "48px", width: "auto", maxWidth: "160px", objectFit: "contain" }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                  const svg = (e.currentTarget as HTMLImageElement).nextElementSibling as SVGSVGElement | null;
+                  if (svg) svg.style.display = "block";
+                }}
+              />
+              <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "none", width: "28px", height: "28px" }} aria-hidden>
+                <rect x="1.5" y="10" width="11" height="8" rx="4" stroke="currentColor" strokeWidth="1.75" />
+                <circle cx="20" cy="14" r="6.5" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M20 11.25v5.5M17.25 14h5.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+            </picture>
           </div>
           <div className="brand-text-wrapper">
             <p className="brand-name">Jerlyd Pharmacy</p>
