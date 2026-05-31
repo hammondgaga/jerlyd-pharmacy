@@ -212,11 +212,11 @@ export function WithdrawModal({
           </button>
           <button
             type="button"
-            className="wallet-btn-primary"
+            className={`wallet-btn-primary${status === "pending" ? " is-pending" : ""}`}
             disabled={!hasSigningKey || status === "pending" || !amount || !destination}
             onClick={() => void handleConfirm()}
           >
-            {status === "pending" ? "Sending…" : "Confirm withdrawal"}
+            {status === "pending" ? "Sending…" : status === "success" ? "✓ Sent" : "Confirm withdrawal"}
           </button>
         </div>
       </div>

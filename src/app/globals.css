@@ -1216,6 +1216,11 @@ th {
   cursor: not-allowed;
 }
 
+.wallet-btn-primary.is-pending {
+  opacity: 0.75;
+  cursor: wait;
+}
+
 .wallet-btn-outline {
   background: #fff;
   color: var(--brand);

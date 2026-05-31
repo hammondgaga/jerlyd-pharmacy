@@ -31,26 +31,39 @@ export async function payUsdcOnArcServer(params: {
     throw new Error("Invalid recipient wallet address.");
   }
 
-  const kit = new AppKit({ disableErrorReporting: true });
-  const adapter = createViemAdapterFromPrivateKey({ privateKey: params.privateKey });
+  try {
+    console.log("[payUsdcOnArcServer] Initiating transfer:", { amount, to });
+    
+    const kit = new AppKit({ disableErrorReporting: true });
+    const adapter = createViemAdapterFromPrivateKey({ privateKey: params.privateKey });
 
-  const sendParams = {
-    from: { adapter, chain: ARC_CHAIN },
-    to,
-    amount,
-    token: "USDC" as const,
-  };
+    const sendParams = {
+      from: { adapter, chain: ARC_CHAIN },
+      to,
+      amount,
+      token: "USDC" as const,
+    };
 
-  const result = await kit.send(sendParams);
+    const result = await kit.send(sendParams);
 
-  if (result.state === "error") {
-    throw new Error(`USDC transfer failed (${result.name || "send"}).`);
+    if (result.state === "error") {
+      const errorMsg = `USDC transfer failed (${result.name || "send"}).`;
+      console.error("[payUsdcOnArcServer]", errorMsg, result);
+      throw new Error(errorMsg);
+    }
+
+    const txHash = result.txHash;
+    if (!txHash) {
+      console.error("[payUsdcOnArcServer] No transaction hash in result:", result);
+      throw new Error("Transfer submitted but no transaction hash was returned.");
+    }
+
+    console.log("[payUsdcOnArcServer] Transfer successful:", txHash);
+
+    return { txHash, explorerUrl: result.explorerUrl };
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : "Transfer failed";
+    console.error("[payUsdcOnArcServer] Error:", errorMsg, e);
+    throw e;
   }
-
-  const txHash = result.txHash;
-  if (!txHash) {
-    throw new Error("Transfer submitted but no transaction hash was returned.");
-  }
-
-  return { txHash, explorerUrl: result.explorerUrl };
 }

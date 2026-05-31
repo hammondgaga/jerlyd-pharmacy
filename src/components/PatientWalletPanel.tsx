@@ -128,7 +128,11 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
           try {
             await ensurePatientWallet(api, userId, userEmail);
             setHasSigningKey(true);
-          } catch {
+          } catch (signingErr) {
+            console.warn(
+              "[PatientWalletPanel] Could not verify signing key:",
+              signingErr instanceof Error ? signingErr.message : signingErr
+            );
             setHasSigningKey(false);
           }
         }
@@ -142,6 +146,7 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
         await loadBalance(addr);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not load your in-built wallet.";
+        console.error("[PatientWalletPanel] Error loading wallet:", message);
         setWalletError(message);
         setBuiltInStatus("error");
         setAutoAddress(null);
@@ -234,7 +239,13 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
     setWithdrawStatus("pending");
     setWithdrawMsg("");
     try {
+      console.log("[PatientWalletPanel] Starting withdrawal:", { amount, destination });
+      
       const { privateKey } = await ensurePatientWallet(api, userId, userEmail);
+      if (!privateKey) {
+        throw new Error("Wallet signing key not found. Try refreshing your wallet.");
+      }
+
       const res = await fetch(apiPath("/patient/withdraw-usdc"), {
         method: "POST",
         headers: {
@@ -247,8 +258,23 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
           recipientAddress: destination,
         }),
       });
+
       const data = (await res.json()) as { txHash?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Withdrawal failed.");
+
+      if (!res.ok) {
+        const errorMsg = data.error ?? "Withdrawal failed.";
+        console.error("[PatientWalletPanel] Withdrawal API error:", {
+          status: res.status,
+          error: errorMsg,
+        });
+        throw new Error(errorMsg);
+      }
+
+      if (!data.txHash) {
+        throw new Error("Withdrawal submitted but no transaction hash was returned.");
+      }
+
+      console.log("[PatientWalletPanel] Withdrawal successful:", data.txHash);
 
       setWithdrawStatus("success");
       setWithdrawMsg(`Sent! Transaction: ${data.txHash?.slice(0, 18)}…`);
@@ -260,8 +286,10 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
         setToast("Withdrawal submitted successfully");
       }, 1200);
     } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : "Withdrawal failed.";
+      console.error("[PatientWalletPanel] Withdrawal error:", e);
       setWithdrawStatus("error");
-      setWithdrawMsg(e instanceof Error ? e.message : "Withdrawal failed.");
+      setWithdrawMsg(errorMsg);
     }
   }
 
@@ -394,7 +422,7 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
             <button
               type="button"
               className="wallet-btn-primary"
-              disabled={!hasSigningKey}
+              title={!hasSigningKey ? "Signing key not available on this device" : ""}
               onClick={openWithdrawModal}
             >
               Withdraw USDC
