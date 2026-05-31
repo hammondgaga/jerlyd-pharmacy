@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import Image from "next/image";
 import { PasswordField } from "@/components/PasswordField";
 import { PharmacistRxPanel } from "@/components/PharmacistRxPanel";
 import { PatientWalletPanel } from "@/components/PatientWalletPanel";
@@ -1431,15 +1432,17 @@ export function PharmacyPortal() {
       <div className="bg-pattern" aria-hidden />
       <header className="site-header">
         <div className="brand">
-          <span className="brand-icon" aria-hidden>
-            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="1.5" y="10" width="11" height="8" rx="4" stroke="currentColor" strokeWidth="1.75" />
-              <rect x="6.5" y="10" width="6" height="8" rx="3" fill="currentColor" fillOpacity="0.2" />
-              <circle cx="20" cy="14" r="6.5" stroke="currentColor" strokeWidth="1.75" />
-              <path d="M20 11.25v5.5M17.25 14h5.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div>
+          <div className="brand-logo-wrapper">
+            <Image 
+              src="/logo.jpg" 
+              alt="Jerlyd Pharmacy logo" 
+              height={48}
+              width={160}
+              style={{ objectFit: "contain" }}
+              priority
+            />
+          </div>
+          <div className="brand-text-wrapper">
             <p className="brand-name">Jerlyd Pharmacy</p>
             <p className="brand-tag">Trusted care, clear guidance</p>
           </div>
