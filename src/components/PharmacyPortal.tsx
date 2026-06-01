@@ -348,25 +348,16 @@ export function PharmacyPortal() {
             </p>
           </div>
           <div className="hero-art" aria-hidden>
-            <svg className="hero-illustration" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="100" cy="100" r="88" stroke="#0F6E56" strokeWidth="2" strokeOpacity="0.15" />
-              <circle cx="100" cy="100" r="68" fill="#0F6E56" fillOpacity="0.06" />
-              <rect x="38" y="78" width="52" height="44" rx="22" stroke="#0F6E56" strokeWidth="2.5" />
-              <rect x="58" y="78" width="32" height="44" rx="16" fill="#0F6E56" fillOpacity="0.18" />
-              <line x1="64" y1="100" x2="84" y2="100" stroke="#0F6E56" strokeWidth="2" strokeOpacity="0.35" />
-              <circle cx="138" cy="92" r="28" stroke="#085041" strokeWidth="2.5" />
-              <path d="M138 78v28M124 92h28" stroke="#085041" strokeWidth="2.5" strokeLinecap="round" />
-              <path
-                d="M52 148c12-8 28-8 40 0M108 148c10-6 24-6 34 0"
-                stroke="#0F6E56"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeOpacity="0.4"
-              />
-              <circle cx="72" cy="52" r="6" fill="#0F6E56" fillOpacity="0.25" />
-              <circle cx="148" cy="138" r="5" fill="#0F6E56" fillOpacity="0.2" />
-              <circle cx="48" cy="118" r="4" fill="#085041" fillOpacity="0.15" />
-            </svg>
+            <img
+              src="/logo.jpeg"
+              alt=""
+              style={{
+                width: "100%",
+                maxWidth: "320px",
+                height: "auto",
+                objectFit: "contain"
+              }}
+            />
           </div>
         </div>
       </section>
@@ -1436,7 +1427,7 @@ export function PharmacyPortal() {
               <img 
                 src="/logo.jpeg" 
                 alt="Jerlyd Pharmacy" 
-                style={{ height: "48px", width: "auto" }}
+                style={{ height: "64px", width: "auto" }}
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = "none";
                   const svg = (e.currentTarget as HTMLImageElement).nextElementSibling as SVGSVGElement | null;

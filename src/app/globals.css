@@ -69,12 +69,12 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  height: 48px;
+  height: 64px;
 }
 
 .brand-logo-wrapper img {
   display: block;
-  height: 48px;
+  height: 64px;
   width: auto;
   max-width: 160px;
   object-fit: contain;
@@ -107,11 +107,11 @@ body {
   }
 
   .brand-logo-wrapper {
-    height: 36px;
+    height: 48px;
   }
 
   .brand-logo-wrapper img {
-    height: 36px;
+    height: 48px;
     max-width: 120px;
   }
 
@@ -315,6 +315,19 @@ body {
   width: 100%;
   max-width: 220px;
   height: auto;
+}
+
+.hero-art img {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  object-fit: contain;
+}
+
+@media (max-width: 479px) {
+  .hero-art img {
+    max-width: 200px;
+  }
 }
 
 .btn {
