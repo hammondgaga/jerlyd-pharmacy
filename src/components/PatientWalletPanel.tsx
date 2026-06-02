@@ -522,16 +522,109 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
       {orders.length > 0 ? (
         <section className="wallet-section-card">
           <h3 className="wallet-section-title">Order history</h3>
-          <ul className="wallet-order-list">
-            {orders.map((o) => (
-              <li key={o.id} className="wallet-order-item">
-                <span>{o.drugName}</span>
-                <span className="wallet-muted">{formatUsdcDisplay(o.totalUsdc)} USDC</span>
-              </li>
-            ))}
-          </ul>
+          <div className="wallet-order-history">
+            {orders.map((order) => {
+              const orderDate = new Date(order.createdAt);
+              const dateStr = orderDate.toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              });
+
+              const statusColor =
+                order.status === "confirmed"
+                  ? "#4ade80"
+                  : order.status === "pending"
+                    ? "#facc15"
+                    : order.status === "cancelled"
+                      ? "#ef4444"
+                      : "#8b5cf6";
+
+              const statusLabel =
+                order.status === "confirmed"
+                  ? "Confirmed"
+                  : order.status === "pending"
+                    ? "Pending"
+                    : order.status === "cancelled"
+                      ? "Cancelled"
+                      : order.status;
+
+              const paymentMethodLabel =
+                order.paymentMethod === "usdc"
+                  ? "USDC (Blockchain)"
+                  : order.paymentMethod === "card_naira"
+                    ? "Card (Naira)"
+                    : "Pending";
+
+              return (
+                <article key={order.id} className="wallet-order-card">
+                  <div className="wallet-order-header">
+                    <div>
+                      <h4 className="wallet-order-drug">{order.drugName}</h4>
+                      <p className="wallet-order-date">
+                        <span className="wallet-muted">Ordered:</span> {dateStr}
+                      </p>
+                    </div>
+                    <div
+                      className="wallet-status-badge"
+                      style={{
+                        backgroundColor: statusColor,
+                        color: "white",
+                        padding: "4px 12px",
+                        borderRadius: "4px",
+                        fontSize: "0.85rem",
+                        fontWeight: "600",
+                      }}
+                    >
+                      {statusLabel}
+                    </div>
+                  </div>
+
+                  <div className="wallet-order-details">
+                    <div className="wallet-order-detail">
+                      <span className="wallet-muted">Quantity</span>
+                      <span>
+                        {order.quantity} {order.unit}
+                      </span>
+                    </div>
+                    <div className="wallet-order-detail">
+                      <span className="wallet-muted">Price (₦)</span>
+                      <span>₦{order.totalNaira.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="wallet-order-detail">
+                      <span className="wallet-muted">Price (USDC)</span>
+                      <span>{formatUsdcDisplay(order.totalUsdc)} USDC</span>
+                    </div>
+                    <div className="wallet-order-detail">
+                      <span className="wallet-muted">Payment</span>
+                      <span>{paymentMethodLabel}</span>
+                    </div>
+                  </div>
+
+                  {order.pharmacistNote ? (
+                    <div className="wallet-order-note">
+                      <p className="wallet-muted">
+                        <strong>Pharmacist note:</strong>
+                      </p>
+                      <p>{order.pharmacistNote}</p>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
         </section>
-      ) : null}
+      ) : (
+        <section className="wallet-section-card">
+          <h3 className="wallet-section-title">Order history</h3>
+          <div className="wallet-empty-state">
+            <p className="wallet-muted">No orders yet.</p>
+            <p className="wallet-muted" style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
+              Visit Marketplace to place your first order.
+            </p>
+          </div>
+        </section>
+      )}
 
       <WithdrawModal
         open={withdrawModalOpen}

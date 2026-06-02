@@ -2277,3 +2277,112 @@ th {
   display: block;
   background: #eef5f2;
 }
+/* —— Order History Styles —— */
+.wallet-order-history {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.wallet-order-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem;
+  background: #fafafa;
+}
+
+.wallet-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.wallet-order-drug {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wallet-order-date {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.wallet-status-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.wallet-order-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.wallet-order-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.wallet-order-detail span:first-child {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.wallet-order-detail span:last-child {
+  font-size: 0.95rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.wallet-order-note {
+  background: rgba(15, 110, 86, 0.03);
+  padding: 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid rgba(15, 110, 86, 0.2);
+}
+
+.wallet-order-note p {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.wallet-order-note p:last-child {
+  margin-bottom: 0;
+}
+
+.wallet-empty-state {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background: #fafafa;
+  border-radius: var(--radius);
+}
+
+.wallet-empty-state p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .wallet-order-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wallet-status-badge {
+    align-self: flex-start;
+  }
+
+  .wallet-order-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

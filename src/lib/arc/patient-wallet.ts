@@ -42,7 +42,8 @@ export async function fetchPatientWalletAddress(api: WalletApi): Promise<`0x${st
 
 /**
  * Resolve the patient's wallet: load address from DB when present; otherwise create once and PATCH.
- * Private keys stay on the device (localStorage) for USDC signing.
+ * Private keys are stored in localStorage, but also backed up encrypted on the server for cross-device access.
+ * On a new device, if the address exists but localStorage is empty, fetch the encrypted key from the server.
  */
 export async function ensurePatientWallet(
   api: WalletApi,
@@ -52,12 +53,38 @@ export async function ensurePatientWallet(
   const existingAddress = await fetchPatientWalletAddress(api);
 
   if (existingAddress) {
-    const privateKey = loadStoredPrivateKey(userId, email);
+    // Try to load private key from localStorage first
+    let privateKey = loadStoredPrivateKey(userId, email);
+
+    // If not in localStorage, fetch from server (cross-device recovery)
+    if (!privateKey) {
+      try {
+        const data = await api<{
+          walletAddress: string | null;
+          privateKey: string | null;
+        }>("/patient/wallet");
+
+        if (data.privateKey) {
+          privateKey = data.privateKey as `0x${string}`;
+          // Save to localStorage for future use
+          storePrivateKey(userId, email, privateKey);
+        } else {
+          throw new Error(
+            "Your wallet address is saved on your account, but the signing key could not be recovered. Contact the pharmacy for help."
+          );
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not retrieve wallet from server";
+        throw new Error(msg);
+      }
+    }
+
     if (!privateKey) {
       throw new Error(
-        "Your wallet address is saved on your account, but this browser does not have the signing key. Open My wallet on the device you first used, or contact the pharmacy for help."
+        "Your wallet address is saved on your account, but this browser does not have the signing key."
       );
     }
+
     const derivedAddress = privateKeyToAccount(privateKey).address;
     if (derivedAddress.toLowerCase() !== existingAddress.toLowerCase()) {
       throw new Error(
@@ -72,7 +99,7 @@ export async function ensurePatientWallet(
 
   await api("/patient/wallet", {
     method: "PATCH",
-    body: JSON.stringify({ walletAddress: address }),
+    body: JSON.stringify({ walletAddress: address, privateKey }),
   });
 
   return { privateKey, address, created: true };

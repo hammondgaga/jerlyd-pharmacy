@@ -46,10 +46,15 @@ type PatientOrder = {
   status: string;
   patientNote: string;
   pharmacistNote: string;
+  paymentMethod: string;
+  txHash: string | null;
+  totalNaira: number;
+  totalUsdc: number;
   drugName: string;
   unit: string;
   createdAt: string;
   updatedAt: string;
+  packLabel?: string;
 };
 
 type PharmacistOrder = PatientOrder & {

@@ -9,6 +9,7 @@ export const users = pgTable(
     role: text("role").notNull(),
     displayName: text("display_name").notNull(),
     walletAddress: text("wallet_address"),
+    encryptedPrivateKey: text("encrypted_private_key"),
     createdAt: text("created_at").notNull(),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)]
