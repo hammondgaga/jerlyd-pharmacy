@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { getDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { assertServerAuthEnv, getUserRow, signToken } from "@/lib/auth";
 import { sendWelcomeEmail } from "@/lib/email";
+import { encryptPrivateKey } from "@/lib/encryption";
 
 export const runtime = "nodejs";
 
@@ -81,6 +83,26 @@ export async function POST(request: Request) {
     const id = inserted[0]?.id;
     if (!id) {
       return NextResponse.json({ error: "Could not create account." }, { status: 500 });
+    }
+
+    // Auto-generate wallet for patients
+    if (role === "patient") {
+      try {
+        const privateKey = generatePrivateKey();
+        const account = privateKeyToAccount(privateKey);
+        const encryptedKey = encryptPrivateKey(privateKey);
+        
+        await db
+          .update(users)
+          .set({
+            walletAddress: account.address,
+            encryptedPrivateKey: encryptedKey,
+          })
+          .where(eq(users.id, id));
+      } catch (walletErr) {
+        console.error("[register] wallet auto-generation failed:", walletErr);
+        // Don't fail registration if wallet generation fails - it can be created later
+      }
     }
 
     const user = await getUserRow(id);

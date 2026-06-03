@@ -30,23 +30,35 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
+    // If no wallet exists, return empty response (wallet will be created on demand)
+    if (!row.walletAddress) {
+      return NextResponse.json({
+        walletAddress: null,
+        privateKey: null,
+        walletType: "auto",
+      });
+    }
+
     let privateKey: string | null = null;
     if (row.encryptedPrivateKey) {
       try {
         privateKey = decryptPrivateKey(row.encryptedPrivateKey);
       } catch (e) {
         console.error("[patient/wallet GET] Decryption failed:", e);
-        return NextResponse.json(
-          { error: "Failed to decrypt wallet key." },
-          { status: 500 }
-        );
+        // Return the address but null private key - it will be regenerated if needed
+        console.warn("[patient/wallet GET] Could not decrypt key for user", auth.sub);
+        return NextResponse.json({
+          walletAddress: row.walletAddress,
+          privateKey: null,
+          walletType: "auto",
+        });
       }
     }
 
     return NextResponse.json({
       walletAddress: row.walletAddress,
       privateKey,
-      email: row.email,
+      walletType: "auto",
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";

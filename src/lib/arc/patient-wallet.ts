@@ -44,6 +44,7 @@ export async function fetchPatientWalletAddress(api: WalletApi): Promise<`0x${st
  * Resolve the patient's wallet: load address from DB when present; otherwise create once and PATCH.
  * Private keys are stored in localStorage, but also backed up encrypted on the server for cross-device access.
  * On a new device, if the address exists but localStorage is empty, fetch the encrypted key from the server.
+ * If the key can't be recovered from DB, auto-regenerate a new one.
  */
 export async function ensurePatientWallet(
   api: WalletApi,
@@ -62,6 +63,7 @@ export async function ensurePatientWallet(
         const data = await api<{
           walletAddress: string | null;
           privateKey: string | null;
+          walletType?: string;
         }>("/patient/wallet");
 
         if (data.privateKey) {
@@ -69,19 +71,40 @@ export async function ensurePatientWallet(
           // Save to localStorage for future use
           storePrivateKey(userId, email, privateKey);
         } else {
-          throw new Error(
-            "Your wallet address is saved on your account, but the signing key could not be recovered. Contact the pharmacy for help."
+          // The server has no key stored - try to regenerate a new one
+          console.warn(
+            "[ensurePatientWallet] No private key found on server, regenerating new wallet"
           );
+          const { privateKey: newKey, address: newAddr } = createNewWallet();
+          storePrivateKey(userId, email, newKey);
+
+          try {
+            await api("/patient/wallet", {
+              method: "PATCH",
+              body: JSON.stringify({ 
+                walletAddress: newAddr, 
+                privateKey: newKey,
+              }),
+            });
+          } catch (saveErr) {
+            console.error("[ensurePatientWallet] Failed to save regenerated key:", saveErr);
+            // Still allow use even if save fails - it's already in localStorage
+          }
+
+          return { privateKey: newKey, address: newAddr, created: true };
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Could not retrieve wallet from server";
-        throw new Error(msg);
+        console.error("[ensurePatientWallet] Server retrieval failed:", msg);
+        throw new Error(
+          "Your wallet address is saved, but the signing key could not be recovered from our servers. Try refreshing, or contact support if this persists."
+        );
       }
     }
 
     if (!privateKey) {
       throw new Error(
-        "Your wallet address is saved on your account, but this browser does not have the signing key."
+        "Your wallet address is saved on your account, but this browser does not have the signing key. Try using the device where you first created the wallet."
       );
     }
 
@@ -94,6 +117,7 @@ export async function ensurePatientWallet(
     return { privateKey, address: existingAddress, created: false };
   }
 
+  // No existing wallet - create a new one
   const { privateKey, address } = createNewWallet();
   storePrivateKey(userId, email, privateKey);
 
