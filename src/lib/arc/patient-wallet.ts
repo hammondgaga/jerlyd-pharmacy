@@ -2,29 +2,60 @@
 
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
-const STORAGE_PREFIX = "jerlyd-arc-wallet-v1";
-
 type WalletApi = <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
 
-function storageKey(userId: number, email: string) {
-  return `${STORAGE_PREFIX}:${userId}:${email.toLowerCase()}`;
-}
+type StoredWallet = {
+  address: `0x${string}`;
+  privateKey: `0x${string}`;
+};
 
 export function isWalletAddress(addr: string): addr is `0x${string}` {
   return /^0x[a-fA-F0-9]{40}$/.test(addr);
 }
 
-function loadStoredPrivateKey(userId: number, email: string): `0x${string}` | null {
+function isPrivateKey(key: string): key is `0x${string}` {
+  return /^0x[a-fA-F0-9]{64}$/.test(key);
+}
+
+/**
+ * Load wallet from localStorage using simplified key format.
+ * Key format: arc_wallet_${userId}
+ */
+function loadStoredWallet(userId: number): StoredWallet | null {
   if (typeof window === "undefined") return null;
-  const existing = localStorage.getItem(storageKey(userId, email));
-  if (existing && /^0x[a-fA-F0-9]{64}$/.test(existing)) {
-    return existing as `0x${string}`;
+  
+  try {
+    const stored = localStorage.getItem(`arc_wallet_${userId}`);
+    if (!stored) return null;
+    
+    const parsed = JSON.parse(stored);
+    if (
+      parsed.address &&
+      isWalletAddress(parsed.address) &&
+      parsed.privateKey &&
+      isPrivateKey(parsed.privateKey)
+    ) {
+      return { address: parsed.address, privateKey: parsed.privateKey };
+    }
+  } catch (e) {
+    console.warn("[loadStoredWallet] Failed to parse stored wallet:", e);
   }
+  
   return null;
 }
 
-function storePrivateKey(userId: number, email: string, privateKey: `0x${string}`) {
-  localStorage.setItem(storageKey(userId, email), privateKey);
+/**
+ * Save wallet to localStorage using simplified key format.
+ * Key format: arc_wallet_${userId}
+ */
+function saveStoredWallet(userId: number, wallet: StoredWallet): void {
+  if (typeof window === "undefined") return;
+  
+  try {
+    localStorage.setItem(`arc_wallet_${userId}`, JSON.stringify(wallet));
+  } catch (e) {
+    console.error("[saveStoredWallet] Failed to save wallet:", e);
+  }
 }
 
 function createNewWallet(): { privateKey: `0x${string}`; address: `0x${string}` } {
@@ -35,112 +66,85 @@ function createNewWallet(): { privateKey: `0x${string}`; address: `0x${string}` 
 
 /** Read the canonical wallet address from the database (never generates). */
 export async function fetchPatientWalletAddress(api: WalletApi): Promise<`0x${string}` | null> {
-  const data = await api<{ walletAddress: string | null }>("/patient/wallet");
-  const addr = data.walletAddress?.trim() || "";
-  return isWalletAddress(addr) ? addr : null;
+  try {
+    const data = await api<{ walletAddress: string | null }>("/patient/wallet");
+    const addr = data.walletAddress?.trim() || "";
+    return isWalletAddress(addr) ? addr : null;
+  } catch (e) {
+    console.error("[fetchPatientWalletAddress] Error:", e);
+    return null;
+  }
 }
 
 /**
- * Resolve the patient's wallet: load address from DB when present; otherwise create once and PATCH.
- * Private keys are stored in localStorage, but also backed up encrypted on the server for cross-device access.
- * On a new device, if the address exists but localStorage is empty, fetch the encrypted key from the server.
- * If the key can't be recovered from DB, auto-regenerate a new one.
+ * Ensure patient has a wallet with both address and private key.
+ * Production-ready cross-device support:
+ * 1. Check localStorage first (fast path)
+ * 2. Fetch encrypted key from server (cross-device recovery)
+ * 3. Generate new wallet if none exists
+ * 4. Always save to localStorage after retrieval
  */
 export async function ensurePatientWallet(
   api: WalletApi,
   userId: number,
   email: string
 ): Promise<{ privateKey: `0x${string}`; address: `0x${string}`; created: boolean; replaced?: boolean }> {
-  const existingAddress = await fetchPatientWalletAddress(api);
-
-  if (existingAddress) {
-    // Try to load private key from localStorage first
-    let privateKey = loadStoredPrivateKey(userId, email);
-
-    // If not in localStorage, fetch from server (cross-device recovery)
-    if (!privateKey) {
-      try {
-        const data = await api<{
-          walletAddress: string | null;
-          privateKey: string | null;
-          walletType?: string;
-        }>("/patient/wallet");
-
-        if (data.privateKey) {
-          privateKey = data.privateKey as `0x${string}`;
-          // Save to localStorage for future use
-          storePrivateKey(userId, email, privateKey);
-        } else {
-          // The server has no key stored - regenerate a new one to replace the broken wallet
-          console.warn(
-            "[ensurePatientWallet] No private key found on server for existing wallet, regenerating new wallet"
-          );
-          const { privateKey: newKey, address: newAddr } = createNewWallet();
-          storePrivateKey(userId, email, newKey);
-
-          try {
-            const patchResp = await api<{ walletAddress: string; replaced?: boolean }>("/patient/wallet", {
-              method: "PATCH",
-              body: JSON.stringify({ 
-                walletAddress: newAddr, 
-                privateKey: newKey,
-              }),
-            });
-
-            console.log("[ensurePatientWallet] Wallet replaced on server", {
-              oldAddress: existingAddress,
-              newAddress: newAddr,
-              replaced: patchResp.replaced,
-            });
-
-            // Return the new wallet with replaced flag
-            return { 
-              privateKey: newKey, 
-              address: newAddr, 
-              created: true,
-              replaced: patchResp.replaced === true,
-            };
-          } catch (saveErr) {
-            console.error("[ensurePatientWallet] Failed to save regenerated key:", saveErr);
-            throw new Error(
-              "A new wallet was generated, but could not be saved to the server. Please refresh and try again."
-            );
-          }
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Could not retrieve wallet from server";
-        console.error("[ensurePatientWallet] Server retrieval failed:", msg);
-        throw new Error(
-          "Your wallet address is saved, but the signing key could not be recovered from our servers. Try refreshing, or contact support if this persists."
-        );
-      }
-    }
-
-    if (!privateKey) {
-      throw new Error(
-        "Your wallet address is saved on your account, but this browser does not have the signing key. Try using the device where you first created the wallet."
-      );
-    }
-
-    const derivedAddress = privateKeyToAccount(privateKey).address;
-    if (derivedAddress.toLowerCase() !== existingAddress.toLowerCase()) {
-      throw new Error(
-        "This browser has a different wallet than your account. Use the device where you first opened My wallet to pay with USDC."
-      );
-    }
-    return { privateKey, address: existingAddress, created: false };
+  // Step 1: Check localStorage first (fastest path)
+  const stored = loadStoredWallet(userId);
+  if (stored) {
+    return { privateKey: stored.privateKey, address: stored.address, created: false };
   }
 
-  // No existing wallet - create a new one
+  // Step 2: Fetch from server (works on any device)
+  try {
+    const serverData = await api<{
+      walletAddress: string | null;
+      privateKey: string | null;
+    }>("/patient/wallet");
+
+    if (serverData.walletAddress && serverData.privateKey) {
+      const wallet: StoredWallet = {
+        address: serverData.walletAddress as `0x${string}`,
+        privateKey: serverData.privateKey as `0x${string}`,
+      };
+      // Save to localStorage for future use
+      saveStoredWallet(userId, wallet);
+      return { privateKey: wallet.privateKey, address: wallet.address, created: false };
+    }
+  } catch (e) {
+    console.warn("[ensurePatientWallet] Server fetch failed:", e);
+    // Continue to generate new wallet if server fetch fails
+  }
+
+  // Step 3: Generate new wallet if none exists on server
   const { privateKey, address } = createNewWallet();
-  storePrivateKey(userId, email, privateKey);
 
-  const patchResp = await api<{ walletAddress: string; replaced?: boolean }>("/patient/wallet", {
-    method: "PATCH",
-    body: JSON.stringify({ walletAddress: address, privateKey }),
-  });
+  try {
+    const patchResp = await api<{ walletAddress: string; replaced?: boolean }>("/patient/wallet", {
+      method: "PATCH",
+      body: JSON.stringify({
+        walletAddress: address,
+        privateKey, // Server will encrypt and store this
+      }),
+    });
 
-  return { privateKey, address, created: true };
+    // Save to localStorage for future use
+    saveStoredWallet(userId, { address, privateKey });
+
+    return {
+      privateKey,
+      address,
+      created: true,
+      replaced: patchResp.replaced === true,
+    };
+  } catch (e) {
+    console.error("[ensurePatientWallet] Failed to save wallet to server:", e);
+    // Still allow use even if save fails - it's in localStorage now
+    saveStoredWallet(userId, { address, privateKey });
+    throw new Error(
+      "Wallet was generated locally but could not be saved to the server. Please refresh and try again."
+    );
+  }
 }
 
 export function truncateAddress(addr: string, head = 6, tail = 4): string {

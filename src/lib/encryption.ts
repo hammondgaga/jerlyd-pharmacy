@@ -1,7 +1,8 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
 /**
- * Encrypt a private key using AES-256-GCM with JWT_SECRET as the key.
+ * Encrypt a private key using AES-256-GCM with JWT_SECRET.
+ * Uses scryptSync for stronger key derivation.
  * Returns a base64-encoded string containing IV + authTag + ciphertext.
  */
 export function encryptPrivateKey(privateKey: string): string {
@@ -10,17 +11,19 @@ export function encryptPrivateKey(privateKey: string): string {
     throw new Error("JWT_SECRET is not configured");
   }
 
-  // Use first 32 bytes of JWT_SECRET as AES-256 key
-  const key = Buffer.from(secret.slice(0, 32).padEnd(32, "0"));
+  // Derive 32-byte key from JWT_SECRET using scryptSync
+  const key = scryptSync(secret, "salt", 32);
   const iv = randomBytes(16);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
 
-  let encrypted = cipher.update(privateKey, "utf8", "hex");
-  encrypted += cipher.final("hex");
-  const authTag = cipher.getAuthTag();
+  const encrypted = Buffer.concat([
+    cipher.update(privateKey, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
 
   // Return IV + authTag + ciphertext, all base64 encoded
-  return Buffer.concat([iv, authTag, Buffer.from(encrypted, "hex")]).toString("base64");
+  return Buffer.concat([iv, tag, encrypted]).toString("base64");
 }
 
 /**
@@ -34,22 +37,19 @@ export function decryptPrivateKey(encrypted: string): string {
   }
 
   try {
-    // Use first 32 bytes of JWT_SECRET as AES-256 key
-    const key = Buffer.from(secret.slice(0, 32).padEnd(32, "0"));
-    const buffer = Buffer.from(encrypted, "base64");
+    // Derive 32-byte key from JWT_SECRET using scryptSync
+    const key = scryptSync(secret, "salt", 32);
+    const buf = Buffer.from(encrypted, "base64");
 
     // Extract IV (16 bytes), authTag (16 bytes), and ciphertext
-    const iv = buffer.slice(0, 16);
-    const authTag = buffer.slice(16, 32);
-    const ciphertext = buffer.slice(32);
+    const iv = buf.subarray(0, 16);
+    const tag = buf.subarray(16, 32);
+    const data = buf.subarray(32);
 
     const decipher = createDecipheriv("aes-256-gcm", key, iv);
-    decipher.setAuthTag(authTag);
+    decipher.setAuthTag(tag);
 
-    let decrypted = decipher.update(ciphertext.toString("hex"), "hex", "utf8");
-    decrypted += decipher.final("utf8");
-
-    return decrypted;
+    return decipher.update(data) + decipher.final("utf8");
   } catch (e) {
     throw new Error(
       `Failed to decrypt private key: ${e instanceof Error ? e.message : "Unknown error"}`
