@@ -50,7 +50,7 @@ export async function ensurePatientWallet(
   api: WalletApi,
   userId: number,
   email: string
-): Promise<{ privateKey: `0x${string}`; address: `0x${string}`; created: boolean }> {
+): Promise<{ privateKey: `0x${string}`; address: `0x${string}`; created: boolean; replaced?: boolean }> {
   const existingAddress = await fetchPatientWalletAddress(api);
 
   if (existingAddress) {
@@ -71,27 +71,41 @@ export async function ensurePatientWallet(
           // Save to localStorage for future use
           storePrivateKey(userId, email, privateKey);
         } else {
-          // The server has no key stored - try to regenerate a new one
+          // The server has no key stored - regenerate a new one to replace the broken wallet
           console.warn(
-            "[ensurePatientWallet] No private key found on server, regenerating new wallet"
+            "[ensurePatientWallet] No private key found on server for existing wallet, regenerating new wallet"
           );
           const { privateKey: newKey, address: newAddr } = createNewWallet();
           storePrivateKey(userId, email, newKey);
 
           try {
-            await api("/patient/wallet", {
+            const patchResp = await api<{ walletAddress: string; replaced?: boolean }>("/patient/wallet", {
               method: "PATCH",
               body: JSON.stringify({ 
                 walletAddress: newAddr, 
                 privateKey: newKey,
               }),
             });
+
+            console.log("[ensurePatientWallet] Wallet replaced on server", {
+              oldAddress: existingAddress,
+              newAddress: newAddr,
+              replaced: patchResp.replaced,
+            });
+
+            // Return the new wallet with replaced flag
+            return { 
+              privateKey: newKey, 
+              address: newAddr, 
+              created: true,
+              replaced: patchResp.replaced === true,
+            };
           } catch (saveErr) {
             console.error("[ensurePatientWallet] Failed to save regenerated key:", saveErr);
-            // Still allow use even if save fails - it's already in localStorage
+            throw new Error(
+              "A new wallet was generated, but could not be saved to the server. Please refresh and try again."
+            );
           }
-
-          return { privateKey: newKey, address: newAddr, created: true };
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Could not retrieve wallet from server";
@@ -121,7 +135,7 @@ export async function ensurePatientWallet(
   const { privateKey, address } = createNewWallet();
   storePrivateKey(userId, email, privateKey);
 
-  await api("/patient/wallet", {
+  const patchResp = await api<{ walletAddress: string; replaced?: boolean }>("/patient/wallet", {
     method: "PATCH",
     body: JSON.stringify({ walletAddress: address, privateKey }),
   });

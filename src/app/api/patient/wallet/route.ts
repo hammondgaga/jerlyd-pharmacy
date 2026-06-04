@@ -91,7 +91,10 @@ export async function PATCH(request: Request) {
 
     const db = getDb();
     const rows = await db
-      .select({ walletAddress: users.walletAddress })
+      .select({
+        walletAddress: users.walletAddress,
+        encryptedPrivateKey: users.encryptedPrivateKey,
+      })
       .from(users)
       .where(eq(users.id, auth.sub))
       .limit(1);
@@ -106,10 +109,15 @@ export async function PATCH(request: Request) {
       if (existing.toLowerCase() === walletAddress.toLowerCase()) {
         return NextResponse.json({ walletAddress: existing });
       }
-      return NextResponse.json(
-        { error: "A wallet address is already linked to this account." },
-        { status: 409 }
-      );
+      // Allow replacement only if the old wallet has no private key (broken wallet)
+      if (row.encryptedPrivateKey) {
+        return NextResponse.json(
+          { error: "A wallet address is already linked to this account." },
+          { status: 409 }
+        );
+      }
+      // If we reach here, we're replacing a broken wallet (has address but no key)
+      console.log("[patient/wallet PATCH] Replacing broken wallet for user", auth.sub);
     }
 
     let encryptedPrivateKey: string | null = null;
@@ -125,6 +133,8 @@ export async function PATCH(request: Request) {
       }
     }
 
+    const wasReplaced = existing && !row.encryptedPrivateKey;
+
     await db
       .update(users)
       .set({
@@ -133,7 +143,7 @@ export async function PATCH(request: Request) {
       })
       .where(eq(users.id, auth.sub));
 
-    return NextResponse.json({ walletAddress });
+    return NextResponse.json({ walletAddress, replaced: wasReplaced });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Could not save wallet.";
     const status = msg.includes("authorization") || msg.includes("jwt") ? 401 : 500;

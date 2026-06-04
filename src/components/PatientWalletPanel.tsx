@@ -124,10 +124,17 @@ export function PatientWalletPanel({ token, userId, userEmail, orders }: Props) 
           const created = await ensurePatientWallet(api, userId, userEmail);
           addr = created.address;
           setHasSigningKey(true);
+          if (created.replaced) {
+            setToast("A new wallet was created for your account. Your previous wallet address has changed.");
+          }
         } else {
           try {
-            await ensurePatientWallet(api, userId, userEmail);
+            const result = await ensurePatientWallet(api, userId, userEmail);
             setHasSigningKey(true);
+            if (result.replaced) {
+              setToast("A new wallet was created for your account. Your previous wallet address has changed.");
+              addr = result.address;
+            }
           } catch (signingErr) {
             console.warn(
               "[PatientWalletPanel] Could not verify signing key:",
